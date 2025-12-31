@@ -1,0 +1,144 @@
+.file-upload-container {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.file-upload-container h2 {
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.file-upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.drop-zone {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.3s;
+  cursor: pointer;
+  background: #f9f9f9;
+}
+
+.drop-zone.drag-active {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.drop-zone:hover {
+  border-color: #667eea;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-label {
+  cursor: pointer;
+  display: block;
+}
+
+.upload-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: #666;
+}
+
+.upload-icon {
+  font-size: 3rem;
+}
+
+.upload-prompt p {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-icon {
+  font-size: 2.5rem;
+}
+
+.file-name {
+  font-weight: bold;
+  color: #333;
+}
+
+.file-size {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.priority-selector {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.priority-selector label {
+  font-weight: bold;
+  color: #333;
+}
+
+.priority-selector select {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.priority-selector select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.upload-button {
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.upload-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.upload-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .file-upload-container {
+    padding: 1.5rem;
+  }
+  
+  .priority-selector {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

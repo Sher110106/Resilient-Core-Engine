@@ -1,0 +1,95 @@
+[package]
+name = "chunkstream_pro"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Erasure coding
+reed-solomon-erasure = "6.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+
+# Crypto & hashing
+blake3 = "1.5"
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+bytes = "1.5"
+num_cpus = "1.16"
+futures = "0.3"
+
+# Network
+quinn = "0.11"
+rustls = { version = "0.23", features = ["ring"] }
+rcgen = "0.13"
+socket2 = "0.5"
+
+# Concurrency
+dashmap = "6.0"
+parking_lot = "0.12"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# API Layer
+axum = { version = "0.7", features = ["ws", "multipart"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Testing
+[dev-dependencies]
+tempfile = "3.8"
+rand = "0.8"
+hex = "0.4"
+hyper = "1.0"
+http-body-util = "0.1"
+
+[[example]]
+name = "chunk_demo"
+path = "examples/chunk_demo.rs"
+
+[[example]]
+name = "integrity_demo"
+path = "examples/integrity_demo.rs"
+
+[[example]]
+name = "network_demo"
+path = "examples/network_demo.rs"
+
+[[example]]
+name = "priority_demo"
+path = "examples/priority_demo.rs"
+
+[[example]]
+name = "session_demo"
+path = "examples/session_demo.rs"
+
+[[example]]
+name = "coordinator_demo"
+path = "examples/coordinator_demo.rs"
+
+[[example]]
+name = "api_demo"
+path = "examples/api_demo.rs"
+
+[[bin]]
+name = "chunkstream-server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name = "chunkstream-receiver"
+path = "src/bin/receiver.rs"
