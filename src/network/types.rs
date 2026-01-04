@@ -87,6 +87,7 @@ impl Default for ConnectionConfig {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct NetworkStats {
     pub total_bytes_sent: u64,
     pub total_bytes_received: u64,
@@ -96,15 +97,3 @@ pub struct NetworkStats {
     pub active_connections: usize,
 }
 
-impl Default for NetworkStats {
-    fn default() -> Self {
-        Self {
-            total_bytes_sent: 0,
-            total_bytes_received: 0,
-            chunks_sent: 0,
-            chunks_received: 0,
-            retransmissions: 0,
-            active_connections: 0,
-        }
-    }
-}

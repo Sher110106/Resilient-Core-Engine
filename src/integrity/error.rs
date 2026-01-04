@@ -18,16 +18,10 @@ pub enum IntegrityError {
     InvalidChecksumLength(usize),
 
     #[error("Verification failed for chunk {chunk_id}: {reason}")]
-    VerificationFailed {
-        chunk_id: u64,
-        reason: String,
-    },
+    VerificationFailed { chunk_id: u64, reason: String },
 
     #[error("Batch verification failed: {passed} passed, {failed} failed")]
-    BatchVerificationFailed {
-        passed: usize,
-        failed: usize,
-    },
+    BatchVerificationFailed { passed: usize, failed: usize },
 }
 
 pub type IntegrityResult<T> = Result<T, IntegrityError>;

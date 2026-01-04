@@ -44,7 +44,10 @@ impl Ord for QueuedChunk {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // Lower sequence numbers have higher priority (sent first)
         // Reverse ordering for max-heap behavior
-        other.chunk.metadata.sequence_number
+        other
+            .chunk
+            .metadata
+            .sequence_number
             .cmp(&self.chunk.metadata.sequence_number)
     }
 }
@@ -83,7 +86,12 @@ pub struct BandwidthAllocation {
 }
 
 impl BandwidthAllocation {
-    pub fn new(total_bps: u64, critical_pending: usize, high_pending: usize, normal_pending: usize) -> Self {
+    pub fn new(
+        total_bps: u64,
+        critical_pending: usize,
+        high_pending: usize,
+        normal_pending: usize,
+    ) -> Self {
         // Default ratios: Critical 50%, High 30%, Normal 20%
         let mut critical_bps = total_bps / 2;
         let mut high_bps = total_bps * 3 / 10;

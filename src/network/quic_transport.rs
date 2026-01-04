@@ -3,7 +3,7 @@ use crate::network::error::{NetworkError, NetworkResult};
 use crate::network::types::{ConnectionConfig, NetworkStats};
 use bytes::Bytes;
 use dashmap::DashMap;
-use quinn::{Connection, Endpoint, RecvStream, SendStream, ServerConfig};
+use quinn::{Connection, Endpoint, RecvStream, ServerConfig};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,7 +19,7 @@ impl QuicTransport {
     /// Create new QUIC transport with self-signed certificate
     pub async fn new(config: ConnectionConfig) -> NetworkResult<Self> {
         let (endpoint, _server_cert) = Self::make_server_endpoint(config.bind_addr)?;
-        
+
         Ok(Self {
             endpoint,
             connections: Arc::new(DashMap::new()),
@@ -43,7 +43,7 @@ impl QuicTransport {
 
         let transport_config = Arc::get_mut(&mut server_config.transport)
             .ok_or_else(|| NetworkError::QuicError("Failed to get transport config".into()))?;
-        
+
         transport_config
             .max_concurrent_uni_streams(100_u32.into())
             .max_idle_timeout(Some(Duration::from_secs(60).try_into().unwrap()))
@@ -86,15 +86,15 @@ impl QuicTransport {
     /// Connect to remote endpoint
     pub async fn connect(&self, remote_addr: SocketAddr) -> NetworkResult<Connection> {
         let endpoint = Self::make_client_endpoint()?;
-        
+
         let conn = endpoint
             .connect(remote_addr, "localhost")
             .map_err(|e| NetworkError::ConnectionFailed(e.to_string()))?
             .await?;
 
-        let conn_id = format!("{}", remote_addr);
+        let conn_id = format!("{remote_addr}");
         self.connections.insert(conn_id.clone(), conn.clone());
-        
+
         // Update stats
         {
             let mut stats = self.stats.write();
@@ -113,10 +113,10 @@ impl QuicTransport {
             .ok_or_else(|| NetworkError::ConnectionClosed("Endpoint closed".into()))?;
 
         let conn = incoming.await?;
-        
+
         let conn_id = format!("{}", conn.remote_address());
         self.connections.insert(conn_id, conn.clone());
-        
+
         // Update stats
         {
             let mut stats = self.stats.write();
@@ -132,25 +132,32 @@ impl QuicTransport {
 
         // Serialize metadata
         let metadata_bytes = bincode::serialize(&chunk.metadata)?;
-        
+
         // Send metadata length
         send_stream
             .write_u32(metadata_bytes.len() as u32)
             .await
             .map_err(|e| NetworkError::SendFailed(e.to_string()))?;
-        
+
         // Send metadata
-        send_stream.write_all(&metadata_bytes).await
+        send_stream
+            .write_all(&metadata_bytes)
+            .await
             .map_err(|e| NetworkError::SendFailed(e.to_string()))?;
-        
+
         // Send data
-        send_stream.write_all(&chunk.data).await
+        send_stream
+            .write_all(&chunk.data)
+            .await
             .map_err(|e| NetworkError::SendFailed(e.to_string()))?;
-        
+
         // Finish stream
-        send_stream.finish()
+        send_stream
+            .finish()
             .map_err(|e| NetworkError::SendFailed(e.to_string()))?;
-        send_stream.stopped().await
+        send_stream
+            .stopped()
+            .await
             .map_err(|e| NetworkError::SendFailed(e.to_string()))?;
 
         // Update stats
@@ -166,17 +173,24 @@ impl QuicTransport {
     /// Receive chunk from QUIC stream
     pub async fn receive_chunk(&self, mut recv_stream: RecvStream) -> NetworkResult<Chunk> {
         // Read metadata length
-        let metadata_len = recv_stream.read_u32().await
-            .map_err(|e| NetworkError::ReceiveFailed(e.to_string()))? as usize;
-        
+        let metadata_len = recv_stream
+            .read_u32()
+            .await
+            .map_err(|e| NetworkError::ReceiveFailed(e.to_string()))?
+            as usize;
+
         // Read metadata
         let mut metadata_bytes = vec![0u8; metadata_len];
-        recv_stream.read_exact(&mut metadata_bytes).await
+        recv_stream
+            .read_exact(&mut metadata_bytes)
+            .await
             .map_err(|e| NetworkError::ReceiveFailed(e.to_string()))?;
         let metadata = bincode::deserialize(&metadata_bytes)?;
-        
+
         // Read remaining data (max 10MB for safety)
-        let data = recv_stream.read_to_end(10 * 1024 * 1024).await
+        let data = recv_stream
+            .read_to_end(10 * 1024 * 1024)
+            .await
             .map_err(|e| NetworkError::ReceiveFailed(e.to_string()))?;
 
         // Update stats
@@ -212,13 +226,13 @@ impl QuicTransport {
                         max_retries,
                         e
                     );
-                    
+
                     // Update retry stats
                     {
                         let mut stats = self.stats.write();
                         stats.retransmissions += 1;
                     }
-                    
+
                     tokio::time::sleep(backoff).await;
                     backoff *= 2;
                     attempts += 1;
@@ -234,7 +248,7 @@ impl QuicTransport {
     pub fn local_addr(&self) -> NetworkResult<SocketAddr> {
         self.endpoint
             .local_addr()
-            .map_err(|e| NetworkError::IoError(e))
+            .map_err(NetworkError::IoError)
     }
 
     /// Get network statistics
@@ -372,7 +386,7 @@ mod tests {
         let client_config = ConnectionConfig::default();
         let client = QuicTransport::new(client_config).await.unwrap();
         let conn = client.connect(server_addr).await.unwrap();
-        
+
         let chunk = create_test_chunk(b"test data");
         client.send_chunk(&conn, &chunk).await.unwrap();
 
@@ -388,7 +402,7 @@ mod tests {
         init_crypto();
         let config = ConnectionConfig::default();
         let transport = QuicTransport::new(config).await.unwrap();
-        
+
         let stats = transport.stats();
         assert_eq!(stats.chunks_sent, 0);
         assert_eq!(stats.chunks_received, 0);
@@ -416,7 +430,7 @@ mod tests {
         let client_config = ConnectionConfig::default();
         let client = QuicTransport::new(client_config).await.unwrap();
         let conn = client.connect(server_addr).await.unwrap();
-        
+
         let chunk = create_test_chunk(b"retry test");
         let result = client.send_with_retry(&conn, &chunk, 3).await;
         assert!(result.is_ok());

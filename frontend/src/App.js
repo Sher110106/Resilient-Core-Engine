@@ -3,30 +3,52 @@ import './App.css';
 import FileUpload from './components/FileUpload';
 import TransferList from './components/TransferList';
 import Dashboard from './components/Dashboard';
+import ModeSelector from './components/ModeSelector';
+import ReceiverDashboard from './components/ReceiverDashboard';
+import ReceivedFilesList from './components/ReceivedFilesList';
 import api from './services/api';
+import receiverApi from './services/receiverApi';
 
 function App() {
+  const [mode, setMode] = useState('sender'); // 'sender' or 'receiver'
   const [transfers, setTransfers] = useState([]);
   const [stats, setStats] = useState({ active: 0, completed: 0, failed: 0 });
   const wsRef = useRef(null);
+  
+  // Receiver state
+  const [receiverUrl, setReceiverUrl] = useState('http://localhost:8080');
+  const [receiverStatus, setReceiverStatus] = useState(null);
+  const [receivedFiles, setReceivedFiles] = useState([]);
 
   useEffect(() => {
-    // Load initial transfers
-    loadTransfers();
+    if (mode === 'sender') {
+      // Load initial transfers
+      loadTransfers();
 
-    // Setup WebSocket connection
-    setupWebSocket();
+      // Setup WebSocket connection
+      setupWebSocket();
 
-    // Poll for updates every 2 seconds as backup
-    const interval = setInterval(loadTransfers, 2000);
+      // Poll for updates every 2 seconds as backup
+      const interval = setInterval(loadTransfers, 2000);
 
-    return () => {
-      clearInterval(interval);
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
+      return () => {
+        clearInterval(interval);
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+      };
+    } else {
+      // Receiver mode: load receiver data
+      loadReceiverData();
+      
+      // Poll receiver every 2 seconds
+      const interval = setInterval(loadReceiverData, 2000);
+      
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [mode, receiverUrl]);
 
   const setupWebSocket = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -102,9 +124,9 @@ function App() {
     }
   };
 
-  const handleFileUpload = async (file, priority) => {
+  const handleFileUpload = async (file, priority, receiverAddr) => {
     try {
-      const result = await api.uploadAndTransfer(file, priority);
+      const result = await api.uploadAndTransfer(file, priority, receiverAddr);
       console.log('Transfer started:', result);
       alert(`Transfer started! Session ID: ${result.session_id}`);
       // Reload transfers to show the new one
@@ -142,6 +164,30 @@ function App() {
     }
   };
 
+  const loadReceiverData = async () => {
+    try {
+      receiverApi.setBaseUrl(receiverUrl);
+      const [status, files] = await Promise.all([
+        receiverApi.getStatus(),
+        receiverApi.listFiles()
+      ]);
+      setReceiverStatus(status);
+      setReceivedFiles(files);
+    } catch (error) {
+      console.error('Error loading receiver data:', error);
+      setReceiverStatus({ listening: false });
+      setReceivedFiles([]);
+    }
+  };
+
+  const handleModeChange = (newMode) => {
+    setMode(newMode);
+  };
+
+  const handleReceiverUrlChange = (url) => {
+    setReceiverUrl(url);
+  };
+
   return (
     <div className="App">
       <header className="App-header">
@@ -149,17 +195,33 @@ function App() {
         <p>Smart File Transfer System with Erasure Coding</p>
       </header>
 
+      <ModeSelector mode={mode} onModeChange={handleModeChange} />
+
       <main className="App-main">
-        <Dashboard stats={stats} />
-        
-        <FileUpload onUpload={handleFileUpload} />
-        
-        <TransferList 
-          transfers={transfers}
-          onPause={handlePause}
-          onResume={handleResume}
-          onCancel={handleCancel}
-        />
+        {mode === 'sender' ? (
+          <>
+            <Dashboard stats={stats} />
+            <FileUpload onUpload={handleFileUpload} />
+            <TransferList 
+              transfers={transfers}
+              onPause={handlePause}
+              onResume={handleResume}
+              onCancel={handleCancel}
+            />
+          </>
+        ) : (
+          <>
+            <ReceiverDashboard 
+              status={receiverStatus}
+              receiverUrl={receiverUrl}
+              onReceiverUrlChange={handleReceiverUrlChange}
+            />
+            <ReceivedFilesList 
+              files={receivedFiles}
+              receiverUrl={receiverUrl}
+            />
+          </>
+        )}
       </main>
 
       <footer className="App-footer">

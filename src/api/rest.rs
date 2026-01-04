@@ -47,16 +47,19 @@ async fn upload_and_transfer(
 ) -> ApiResult<(StatusCode, Json<StartTransferResponse>)> {
     let mut file_path: Option<std::path::PathBuf> = None;
     let mut priority = crate::chunk::Priority::Normal;
+    let mut receiver_addr: Option<std::net::SocketAddr> = None;
 
     // Create uploads directory if it doesn't exist
     let upload_dir = std::path::PathBuf::from("./uploads");
-    tokio::fs::create_dir_all(&upload_dir)
-        .await
-        .map_err(|e| ApiError::InternalError(format!("Failed to create uploads directory: {}", e)))?;
+    tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| {
+        ApiError::InternalError(format!("Failed to create uploads directory: {e}"))
+    })?;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        ApiError::InvalidRequest(format!("Failed to read multipart field: {}", e))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ApiError::InvalidRequest(format!("Failed to read multipart field: {e}")))?
+    {
         let name = field.name().unwrap_or("").to_string();
 
         if name == "file" {
@@ -67,22 +70,23 @@ async fn upload_and_transfer(
 
             let filepath = upload_dir.join(&filename);
             let data = field.bytes().await.map_err(|e| {
-                ApiError::InvalidRequest(format!("Failed to read file data: {}", e))
+                ApiError::InvalidRequest(format!("Failed to read file data: {e}"))
             })?;
 
-            let mut file = File::create(&filepath).await.map_err(|e| {
-                ApiError::InternalError(format!("Failed to create file: {}", e))
-            })?;
+            let mut file = File::create(&filepath)
+                .await
+                .map_err(|e| ApiError::InternalError(format!("Failed to create file: {e}")))?;
 
-            file.write_all(&data).await.map_err(|e| {
-                ApiError::InternalError(format!("Failed to write file: {}", e))
-            })?;
+            file.write_all(&data)
+                .await
+                .map_err(|e| ApiError::InternalError(format!("Failed to write file: {e}")))?;
 
             file_path = Some(filepath);
         } else if name == "priority" {
-            let priority_str = field.text().await.map_err(|e| {
-                ApiError::InvalidRequest(format!("Failed to read priority: {}", e))
-            })?;
+            let priority_str = field
+                .text()
+                .await
+                .map_err(|e| ApiError::InvalidRequest(format!("Failed to read priority: {e}")))?;
 
             priority = match priority_str.as_str() {
                 "Critical" => crate::chunk::Priority::Critical,
@@ -90,15 +94,22 @@ async fn upload_and_transfer(
                 "Normal" => crate::chunk::Priority::Normal,
                 _ => crate::chunk::Priority::Normal,
             };
+        } else if name == "receiver_addr" {
+            let addr_str = field.text().await.map_err(|e| {
+                ApiError::InvalidRequest(format!("Failed to read receiver address: {e}"))
+            })?;
+
+            receiver_addr = Some(addr_str.parse().map_err(|e| {
+                ApiError::InvalidRequest(format!("Invalid receiver address: {e}"))
+            })?);
         }
     }
 
-    let file_path = file_path
-        .ok_or_else(|| ApiError::InvalidRequest("No file uploaded".to_string()))?;
+    let file_path =
+        file_path.ok_or_else(|| ApiError::InvalidRequest("No file uploaded".to_string()))?;
 
-    // For upload endpoint, no receiver address (local simulation mode)
     let session_id = coordinator
-        .send_file(file_path, priority, None)
+        .send_file(file_path, priority, receiver_addr)
         .await
         .map_err(ApiError::CoordinatorError)?;
 
@@ -106,7 +117,9 @@ async fn upload_and_transfer(
         StatusCode::CREATED,
         Json(StartTransferResponse {
             session_id: session_id.clone(),
-            message: format!("File uploaded and transfer started with session ID: {}", session_id),
+            message: format!(
+                "File uploaded and transfer started with session ID: {session_id}"
+            ),
         }),
     ))
 }
@@ -116,7 +129,7 @@ async fn start_transfer(
     Json(req): Json<StartTransferRequest>,
 ) -> ApiResult<(StatusCode, Json<StartTransferResponse>)> {
     let file_path = std::path::PathBuf::from(&req.file_path);
-    
+
     if !file_path.exists() {
         return Err(ApiError::InvalidRequest(format!(
             "File not found: {}",
@@ -125,13 +138,14 @@ async fn start_transfer(
     }
 
     // Parse receiver address if provided
-    let receiver_addr = if let Some(addr_str) = &req.receiver_addr {
-        Some(addr_str.parse().map_err(|e| {
-            ApiError::InvalidRequest(format!("Invalid receiver address: {}", e))
-        })?)
-    } else {
-        None
-    };
+    let receiver_addr =
+        if let Some(addr_str) = &req.receiver_addr {
+            Some(addr_str.parse().map_err(|e| {
+                ApiError::InvalidRequest(format!("Invalid receiver address: {e}"))
+            })?)
+        } else {
+            None
+        };
 
     let session_id = coordinator
         .send_file(file_path, req.priority, receiver_addr)
@@ -142,7 +156,7 @@ async fn start_transfer(
         StatusCode::CREATED,
         Json(StartTransferResponse {
             session_id: session_id.clone(),
-            message: format!("Transfer started with session ID: {}", session_id),
+            message: format!("Transfer started with session ID: {session_id}"),
         }),
     ))
 }
@@ -166,7 +180,7 @@ async fn get_transfer(
 ) -> ApiResult<Json<TransferStateResponse>> {
     let state = coordinator
         .get_state(&session_id)
-        .ok_or_else(|| ApiError::NotFound(format!("Transfer not found: {}", session_id)))?;
+        .ok_or_else(|| ApiError::NotFound(format!("Transfer not found: {session_id}")))?;
 
     let state_str = match state {
         crate::coordinator::TransferState::Idle => "Idle",
@@ -197,7 +211,7 @@ async fn pause_transfer(
         .map_err(ApiError::CoordinatorError)?;
 
     Ok(Json(SuccessResponse {
-        message: format!("Transfer {} paused", session_id),
+        message: format!("Transfer {session_id} paused"),
     }))
 }
 
@@ -211,7 +225,7 @@ async fn resume_transfer(
         .map_err(ApiError::CoordinatorError)?;
 
     Ok(Json(SuccessResponse {
-        message: format!("Transfer {} resumed", session_id),
+        message: format!("Transfer {session_id} resumed"),
     }))
 }
 
@@ -225,7 +239,7 @@ async fn cancel_transfer(
         .map_err(ApiError::CoordinatorError)?;
 
     Ok(Json(SuccessResponse {
-        message: format!("Transfer {} cancelled", session_id),
+        message: format!("Transfer {session_id} cancelled"),
     }))
 }
 
@@ -271,13 +285,8 @@ mod tests {
         let queue = PriorityQueue::new(1_000_000);
         let session_store = SessionStore::new_in_memory().await.unwrap();
 
-        let coordinator = TransferCoordinator::new(
-            chunk_manager,
-            verifier,
-            transport,
-            queue,
-            session_store,
-        );
+        let coordinator =
+            TransferCoordinator::new(chunk_manager, verifier, transport, queue, session_store);
 
         RestApi::new(coordinator)
     }
@@ -287,7 +296,10 @@ mod tests {
         let api = create_test_api().await;
         let mut app = api.router();
 
-        let request = Request::builder().uri("/health").body(Body::empty()).unwrap();
+        let request = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
         let response = app.call(request).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);

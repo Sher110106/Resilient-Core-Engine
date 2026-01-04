@@ -81,6 +81,10 @@ impl ChunkManager {
                 is_parity,
                 priority,
                 created_at,
+                // File-level metadata for receiver reconstruction
+                file_size: total_size,
+                file_checksum,
+                data_chunks: data_chunks_count as u32,
             };
 
             chunks.push(Chunk {
@@ -170,9 +174,10 @@ impl ChunkManager {
 
         output_file.flush().await?;
 
-        // 5. Verify file-level checksum
+        // 5. Verify file-level checksum (skip if manifest checksum is all zeros/placeholder)
         let calculated_checksum = *file_hasher.finalize().as_bytes();
-        if calculated_checksum != manifest.checksum {
+        let zero_checksum = [0u8; 32];
+        if manifest.checksum != zero_checksum && calculated_checksum != manifest.checksum {
             return Err(ChunkError::ChecksumMismatch {
                 file_id: manifest.file_id.clone(),
             });
@@ -184,9 +189,9 @@ impl ChunkManager {
     /// Adaptive chunk sizing based on network conditions
     pub fn calculate_optimal_chunk_size(&self, rtt_ms: u64, loss_rate: f32) -> usize {
         match (rtt_ms, loss_rate) {
-            (rtt, loss) if rtt > 200 || loss > 0.1 => 64 * 1024,      // 64KB
-            (rtt, loss) if rtt > 100 || loss > 0.05 => 256 * 1024,    // 256KB
-            _ => 1024 * 1024,                                          // 1MB
+            (rtt, loss) if rtt > 200 || loss > 0.1 => 64 * 1024, // 64KB
+            (rtt, loss) if rtt > 100 || loss > 0.05 => 256 * 1024, // 256KB
+            _ => 1024 * 1024,                                    // 1MB
         }
     }
 
@@ -238,7 +243,7 @@ mod tests {
 
         assert_eq!(chunks.len(), manifest.total_chunks as usize);
         assert_eq!(manifest.data_chunks, 4); // 1MB / 256KB = 4 chunks
-        // With 10 data + 3 parity config, we pad to 10 data shards + 3 parity = 13 total
+                                             // With 10 data + 3 parity config, we pad to 10 data shards + 3 parity = 13 total
         assert_eq!(manifest.total_chunks, 13);
 
         // Reconstruct
@@ -301,7 +306,9 @@ mod tests {
         chunks.truncate(3); // Only 3 chunks, need 4
 
         let output_path = temp_dir.path().join("reconstructed.bin");
-        let result = manager.reconstruct_file(&manifest, chunks, &output_path).await;
+        let result = manager
+            .reconstruct_file(&manifest, chunks, &output_path)
+            .await;
 
         assert!(result.is_err());
         assert!(matches!(
@@ -315,22 +322,13 @@ mod tests {
         let manager = ChunkManager::new(256 * 1024, 10, 3).unwrap();
 
         // Good network
-        assert_eq!(
-            manager.calculate_optimal_chunk_size(50, 0.01),
-            1024 * 1024
-        );
+        assert_eq!(manager.calculate_optimal_chunk_size(50, 0.01), 1024 * 1024);
 
         // Medium network
-        assert_eq!(
-            manager.calculate_optimal_chunk_size(150, 0.07),
-            256 * 1024
-        );
+        assert_eq!(manager.calculate_optimal_chunk_size(150, 0.07), 256 * 1024);
 
         // Poor network
-        assert_eq!(
-            manager.calculate_optimal_chunk_size(300, 0.15),
-            64 * 1024
-        );
+        assert_eq!(manager.calculate_optimal_chunk_size(300, 0.15), 64 * 1024);
     }
 
     #[tokio::test]

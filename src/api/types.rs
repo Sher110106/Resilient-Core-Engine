@@ -1,5 +1,4 @@
 use crate::chunk::Priority;
-use crate::coordinator::TransferState;
 use crate::session::SessionStatus;
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct StartTransferRequest {
     pub file_path: String,
     pub priority: Priority,
-    pub receiver_addr: Option<String>,  // Optional receiver address (e.g., "192.168.1.100:5001")
+    pub receiver_addr: Option<String>, // Optional receiver address (e.g., "192.168.1.100:5001")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,8 +57,16 @@ pub struct SuccessResponse {
 #[serde(tag = "type", content = "data")]
 pub enum WebSocketMessage {
     TransferProgress(TransferProgressResponse),
-    TransferStateChanged { session_id: String, new_state: String },
-    TransferCompleted { session_id: String },
-    TransferFailed { session_id: String, error: String },
+    TransferStateChanged {
+        session_id: String,
+        new_state: String,
+    },
+    TransferCompleted {
+        session_id: String,
+    },
+    TransferFailed {
+        session_id: String,
+        error: String,
+    },
     Error(ErrorResponse),
 }

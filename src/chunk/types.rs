@@ -15,10 +15,14 @@ pub struct ChunkMetadata {
     pub sequence_number: u32,
     pub total_chunks: u32,
     pub data_size: usize,
-    pub checksum: [u8; 32], // BLAKE3 hash
+    pub checksum: [u8; 32], // BLAKE3 hash (chunk-level)
     pub is_parity: bool,
     pub priority: Priority,
     pub created_at: i64,
+    // File-level metadata for reconstruction
+    pub file_size: u64,
+    pub file_checksum: [u8; 32],
+    pub data_chunks: u32,
 }
 
 #[derive(Debug, Clone)]

@@ -4,6 +4,7 @@ import './FileUpload.css';
 function FileUpload({ onUpload }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [priority, setPriority] = useState('Normal');
+  const [receiverAddr, setReceiverAddr] = useState('127.0.0.1:5001');
   const [dragActive, setDragActive] = useState(false);
 
   const handleDrag = (e) => {
@@ -36,9 +37,7 @@ function FileUpload({ onUpload }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (selectedFile) {
-      // Note: In a real implementation, you'd need to upload the file to the server first
-      // For now, we'll pass the file object and the backend will need to handle it
-      await onUpload(selectedFile, priority);
+      await onUpload(selectedFile, priority, receiverAddr);
       setSelectedFile(null);
     }
   };
@@ -79,17 +78,31 @@ function FileUpload({ onUpload }) {
           </label>
         </div>
 
-        <div className="priority-selector">
-          <label htmlFor="priority">Priority:</label>
-          <select 
-            id="priority"
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-          >
-            <option value="Critical">Critical</option>
-            <option value="High">High</option>
-            <option value="Normal">Normal</option>
-          </select>
+        <div className="upload-options">
+          <div className="priority-selector">
+            <label htmlFor="priority">Priority:</label>
+            <select 
+              id="priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            >
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Normal">Normal</option>
+            </select>
+          </div>
+
+          <div className="receiver-address">
+            <label htmlFor="receiver-addr">Receiver Address:</label>
+            <input
+              id="receiver-addr"
+              type="text"
+              value={receiverAddr}
+              onChange={(e) => setReceiverAddr(e.target.value)}
+              placeholder="127.0.0.1:5001"
+              className="receiver-addr-input"
+            />
+          </div>
         </div>
 
         <button 

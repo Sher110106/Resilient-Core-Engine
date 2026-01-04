@@ -9,9 +9,9 @@ pub use types::*;
 pub use websocket::websocket_handler;
 
 use crate::coordinator::TransferCoordinator;
-use axum::{routing::get, Router};
+use axum::{extract::DefaultBodyLimit, routing::get, Router};
 use std::sync::Arc;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 
 /// Create a complete API server with REST and WebSocket support
 pub fn create_api_server(coordinator: TransferCoordinator) -> Router {
@@ -31,6 +31,7 @@ pub fn create_api_server(coordinator: TransferCoordinator) -> Router {
     Router::new()
         .merge(rest_api.router())
         .merge(ws_router)
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB limit
         .layer(cors)
 }
 

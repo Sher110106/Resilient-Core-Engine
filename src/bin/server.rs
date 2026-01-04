@@ -8,6 +8,11 @@ use chunkstream_pro::session::SessionStore;
 
 #[tokio::main]
 async fn main() {
+    // Initialize crypto provider for rustls/quinn
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     println!("\n╔══════════════════════════════════════════════════════════════════╗");
     println!("║          ChunkStream Pro - File Transfer Server                 ║");
     println!("╚══════════════════════════════════════════════════════════════════╝\n");
@@ -15,9 +20,10 @@ async fn main() {
     println!("🚀 Initializing system components...\n");
 
     // Initialize Chunk Manager
-    println!("📦 Chunk Manager: 256KB chunks, 10 data + 3 parity shards");
-    let chunk_manager = ChunkManager::new(256 * 1024, 10, 3)
-        .expect("Failed to create chunk manager");
+    // 512KB chunks with 50 data + 10 parity = supports up to 25MB files
+    println!("📦 Chunk Manager: 512KB chunks, 50 data + 10 parity shards");
+    let chunk_manager =
+        ChunkManager::new(512 * 1024, 50, 10).expect("Failed to create chunk manager");
 
     // Initialize Integrity Verifier
     println!("🔒 Integrity Verifier: BLAKE3 hashing");
@@ -42,13 +48,8 @@ async fn main() {
 
     // Create Transfer Coordinator
     println!("🎯 Transfer Coordinator: Orchestrating all modules");
-    let coordinator = TransferCoordinator::new(
-        chunk_manager,
-        verifier,
-        transport,
-        queue,
-        session_store,
-    );
+    let coordinator =
+        TransferCoordinator::new(chunk_manager, verifier, transport, queue, session_store);
 
     // Create API server
     println!("🌐 API Layer: REST + WebSocket endpoints");
@@ -80,7 +81,5 @@ async fn main() {
     println!("\n🛑 Press Ctrl+C to stop the server\n");
 
     // Start serving
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }

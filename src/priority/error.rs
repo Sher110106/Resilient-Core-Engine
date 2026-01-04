@@ -9,10 +9,7 @@ pub enum QueueError {
     QueueEmpty,
 
     #[error("Max retries exceeded for chunk {chunk_id} (retries: {retries})")]
-    MaxRetriesExceeded {
-        chunk_id: u64,
-        retries: u32,
-    },
+    MaxRetriesExceeded { chunk_id: u64, retries: u32 },
 
     #[error("Invalid priority index: {0}")]
     InvalidPriority(usize),

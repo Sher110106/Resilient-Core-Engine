@@ -25,15 +25,9 @@ impl IntoResponse for ApiError {
             ApiError::CoordinatorError(e) => {
                 (StatusCode::BAD_REQUEST, e.to_string(), "COORDINATOR_ERROR")
             }
-            ApiError::InvalidRequest(e) => {
-                (StatusCode::BAD_REQUEST, e, "INVALID_REQUEST")
-            }
-            ApiError::NotFound(e) => {
-                (StatusCode::NOT_FOUND, e, "NOT_FOUND")
-            }
-            ApiError::InternalError(e) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, e, "INTERNAL_ERROR")
-            }
+            ApiError::InvalidRequest(e) => (StatusCode::BAD_REQUEST, e, "INVALID_REQUEST"),
+            ApiError::NotFound(e) => (StatusCode::NOT_FOUND, e, "NOT_FOUND"),
+            ApiError::InternalError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e, "INTERNAL_ERROR"),
         };
 
         let body = Json(json!({

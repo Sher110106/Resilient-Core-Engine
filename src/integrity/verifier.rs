@@ -17,9 +17,9 @@ impl IntegrityVerifier {
 
     /// Calculate BLAKE3 checksum for file (streaming)
     pub async fn calculate_file_checksum(path: &Path) -> IntegrityResult<[u8; 32]> {
-        let mut file = tokio::fs::File::open(path).await.map_err(|e| {
-            IntegrityError::FileNotFound(format!("{}: {}", path.display(), e))
-        })?;
+        let mut file = tokio::fs::File::open(path)
+            .await
+            .map_err(|e| IntegrityError::FileNotFound(format!("{}: {}", path.display(), e)))?;
 
         let mut hasher = Hasher::new();
         let mut buffer = vec![0u8; 8192];
@@ -86,7 +86,9 @@ impl IntegrityVerifier {
     }
 
     /// Verify all chunks and return summary
-    pub async fn verify_batch_summary(chunks: &[Chunk]) -> IntegrityResult<BatchVerificationSummary> {
+    pub async fn verify_batch_summary(
+        chunks: &[Chunk],
+    ) -> IntegrityResult<BatchVerificationSummary> {
         let results = Self::verify_chunks_parallel(chunks).await;
 
         let passed = results.iter().filter(|r| r.is_ok()).count();
@@ -101,7 +103,7 @@ impl IntegrityVerifier {
                         index: idx,
                         chunk_id: chunks[idx].metadata.chunk_id,
                         sequence_number: chunks[idx].metadata.sequence_number,
-                        error: format!("{}", e),
+                        error: format!("{e}"),
                     })
                 } else {
                     None
@@ -179,13 +181,13 @@ impl IntegrityVerifier {
     /// Verify data against integrity check
     pub fn verify_check(data: &[u8], check: &IntegrityCheck) -> IntegrityResult<()> {
         let calculated = Self::calculate_checksum(data);
-        
+
         if check.value.len() != 32 {
             return Err(IntegrityError::InvalidChecksumLength(check.value.len()));
         }
 
         let expected: [u8; 32] = check.value.as_slice().try_into().unwrap();
-        
+
         if calculated != expected {
             return Err(IntegrityError::ChecksumMismatch {
                 expected,
@@ -303,7 +305,10 @@ mod tests {
 
         let result = IntegrityVerifier::verify_chunk(&chunk);
         assert!(result.is_err());
-        assert!(matches!(result, Err(IntegrityError::ChecksumMismatch { .. })));
+        assert!(matches!(
+            result,
+            Err(IntegrityError::ChecksumMismatch { .. })
+        ));
     }
 
     #[test]
@@ -367,7 +372,9 @@ mod tests {
         chunks[10].metadata.checksum = [0u8; 32];
         chunks[15].metadata.checksum = [0u8; 32];
 
-        let summary = IntegrityVerifier::verify_batch_summary(&chunks).await.unwrap();
+        let summary = IntegrityVerifier::verify_batch_summary(&chunks)
+            .await
+            .unwrap();
 
         assert_eq!(summary.total, 20);
         assert_eq!(summary.passed, 17);
@@ -472,6 +479,9 @@ mod tests {
         check.value = vec![0u8; 16]; // Wrong length
 
         let result = IntegrityVerifier::verify_check(data, &check);
-        assert!(matches!(result, Err(IntegrityError::InvalidChecksumLength(16))));
+        assert!(matches!(
+            result,
+            Err(IntegrityError::InvalidChecksumLength(16))
+        ));
     }
 }

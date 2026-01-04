@@ -25,7 +25,7 @@ async fn handle_websocket(mut socket: WebSocket, coordinator: Arc<TransferCoordi
             _ = tick.tick() => {
                 // Send progress updates for all active transfers
                 let active_transfers = coordinator.list_active();
-                
+
                 for session_id in active_transfers {
                     if let Ok(progress) = coordinator.get_progress(&session_id).await {
                         let msg = WebSocketMessage::TransferProgress(TransferProgressResponse {
@@ -51,11 +51,10 @@ async fn handle_websocket(mut socket: WebSocket, coordinator: Arc<TransferCoordi
                 match msg {
                     Some(Ok(Message::Text(text))) => {
                         // Handle incoming commands (optional)
-                        if text == "ping" {
-                            if socket.send(Message::Text("pong".to_string())).await.is_err() {
+                        if text == "ping"
+                            && socket.send(Message::Text("pong".to_string())).await.is_err() {
                                 return;
                             }
-                        }
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         break;

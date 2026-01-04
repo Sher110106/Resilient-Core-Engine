@@ -1,5 +1,4 @@
 use chunkstream_pro::chunk::{ChunkManager, Priority};
-use std::path::Path;
 use tempfile::TempDir;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -19,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(&test_file).await?;
     let data: Vec<u8> = (0..1024 * 1024).map(|i| (i % 256) as u8).collect();
     file.write_all(&data).await?;
-    println!("   ✓ Test file created at: {:?}\n", test_file);
+    println!("   ✓ Test file created at: {test_file:?}\n");
 
     // Initialize ChunkManager with 256KB chunks, 10 data + 3 parity
     println!("⚙️  Initializing ChunkManager...");
@@ -39,14 +38,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   → Data chunks: {}", manifest.data_chunks);
     println!("   → Parity chunks: {}", manifest.parity_chunks);
     println!("   → Total chunks: {}", manifest.total_chunks);
-    println!(
-        "   → Checksum: {}",
-        hex::encode(&manifest.checksum[..8])
-    );
+    println!("   → Checksum: {}", hex::encode(&manifest.checksum[..8]));
 
     // Show chunk details
     println!("\n📦 Chunk details:");
-    for (i, chunk) in chunks.iter().take(5).enumerate() {
+    for (_i, chunk) in chunks.iter().take(5).enumerate() {
         let chunk_type = if chunk.metadata.is_parity {
             "PARITY"
         } else {
@@ -71,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .reconstruct_file(&manifest, chunks.clone(), &output_file1)
         .await?;
     println!("   ✓ File reconstructed successfully!");
-    println!("   → Output: {:?}\n", output_file1);
+    println!("   → Output: {output_file1:?}\n");
 
     // Simulate chunk loss and reconstruct
     println!("⚠️  Simulating chunk loss scenario...");
@@ -83,7 +79,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     partial_chunks.remove(5);
 
     println!("   ✗ Removed 3 chunks (simulating network loss)");
-    println!("   → Remaining chunks: {}/{}", partial_chunks.len(), chunks.len());
+    println!(
+        "   → Remaining chunks: {}/{}",
+        partial_chunks.len(),
+        chunks.len()
+    );
 
     println!("\n🔧 Reconstructing file (with {} chunks missing)...", 3);
     let output_file2 = temp_dir.path().join("reconstructed_partial.bin");
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .reconstruct_file(&manifest, partial_chunks, &output_file2)
         .await?;
     println!("   ✓ File reconstructed successfully even with missing chunks!");
-    println!("   → Output: {:?}", output_file2);
+    println!("   → Output: {output_file2:?}");
 
     // Verify files are identical
     println!("\n✅ Verifying reconstruction integrity...");
@@ -99,7 +99,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let reconstructed_full = tokio::fs::read(&output_file1).await?;
     let reconstructed_partial = tokio::fs::read(&output_file2).await?;
 
-    assert_eq!(original, reconstructed_full, "Full reconstruction mismatch!");
+    assert_eq!(
+        original, reconstructed_full,
+        "Full reconstruction mismatch!"
+    );
     assert_eq!(
         original, reconstructed_partial,
         "Partial reconstruction mismatch!"
@@ -111,9 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate adaptive chunk sizing
     println!("🌐 Adaptive Chunk Sizing Examples:");
     println!("   ┌─────────────────────────────────────────────────────┐");
-    println!(
-        "   │ Network Quality    │ RTT  │ Loss │ Chunk Size         │"
-    );
+    println!("   │ Network Quality    │ RTT  │ Loss │ Chunk Size         │");
     println!("   ├─────────────────────────────────────────────────────┤");
     println!(
         "   │ Excellent          │ 20ms │  0%  │ {:>6} KB          │",

@@ -30,14 +30,14 @@ impl PriorityQueue {
     /// Enqueue chunk with priority
     pub fn enqueue(&self, chunk: Chunk) -> QueueResult<()> {
         let priority_idx = self.priority_to_index(chunk.metadata.priority);
-        
+
         // Check capacity
         if self.total_pending() >= self.max_capacity {
             return Err(QueueError::QueueFull(self.max_capacity));
         }
 
         let queued = QueuedChunk::new(chunk, priority_idx);
-        
+
         {
             let mut queue = self.queues[priority_idx].write();
             queue.push(queued);
@@ -63,28 +63,27 @@ impl PriorityQueue {
         // Try queues in priority order: Critical -> High -> Normal
         for priority_idx in 0..3 {
             let mut queue = self.queues[priority_idx].write();
-            
+
             if let Some(queued) = queue.pop() {
                 let wait_time_ms = queued.wait_time().as_millis() as u64;
-                
+
                 // Update stats
                 {
                     let mut stats = self.stats.write();
                     stats.total_processed += 1;
-                    
+
                     // Update average wait time
                     if stats.avg_wait_time_ms == 0 {
                         stats.avg_wait_time_ms = wait_time_ms;
                     } else {
-                        stats.avg_wait_time_ms = 
-                            (stats.avg_wait_time_ms + wait_time_ms) / 2;
+                        stats.avg_wait_time_ms = (stats.avg_wait_time_ms + wait_time_ms) / 2;
                     }
-                    
+
                     // Update max wait time
                     if wait_time_ms > stats.max_wait_time_ms {
                         stats.max_wait_time_ms = wait_time_ms;
                     }
-                    
+
                     match priority_idx {
                         0 => stats.critical_pending = stats.critical_pending.saturating_sub(1),
                         1 => stats.high_pending = stats.high_pending.saturating_sub(1),
@@ -92,7 +91,7 @@ impl PriorityQueue {
                         _ => {}
                     }
                 }
-                
+
                 return Ok(queued.chunk);
             }
         }
@@ -104,20 +103,20 @@ impl PriorityQueue {
     pub fn dequeue_priority(&self, priority: Priority) -> QueueResult<Chunk> {
         let priority_idx = self.priority_to_index(priority);
         let mut queue = self.queues[priority_idx].write();
-        
+
         if let Some(queued) = queue.pop() {
             let wait_time_ms = queued.wait_time().as_millis() as u64;
-            
+
             // Update stats
             {
                 let mut stats = self.stats.write();
                 stats.total_processed += 1;
                 stats.avg_wait_time_ms = (stats.avg_wait_time_ms + wait_time_ms) / 2;
-                
+
                 if wait_time_ms > stats.max_wait_time_ms {
                     stats.max_wait_time_ms = wait_time_ms;
                 }
-                
+
                 match priority_idx {
                     0 => stats.critical_pending = stats.critical_pending.saturating_sub(1),
                     1 => stats.high_pending = stats.high_pending.saturating_sub(1),
@@ -125,7 +124,7 @@ impl PriorityQueue {
                     _ => {}
                 }
             }
-            
+
             Ok(queued.chunk)
         } else {
             Err(QueueError::QueueEmpty)
@@ -161,9 +160,7 @@ impl PriorityQueue {
 
     /// Get total pending count across all priorities
     pub fn total_pending(&self) -> usize {
-        self.queues.iter()
-            .map(|q| q.read().len())
-            .sum()
+        self.queues.iter().map(|q| q.read().len()).sum()
     }
 
     /// Check if queue is empty
@@ -176,7 +173,7 @@ impl PriorityQueue {
         for queue in &self.queues {
             queue.write().clear();
         }
-        
+
         let mut stats = self.stats.write();
         stats.critical_pending = 0;
         stats.high_pending = 0;
@@ -278,12 +275,12 @@ mod tests {
     #[test]
     fn test_enqueue_dequeue() {
         let queue = PriorityQueue::new(1000);
-        
+
         let chunk = create_test_chunk(Priority::Normal, 0);
         queue.enqueue(chunk.clone()).unwrap();
-        
+
         assert_eq!(queue.total_pending(), 1);
-        
+
         let dequeued = queue.dequeue().unwrap();
         assert_eq!(dequeued.metadata.chunk_id, chunk.metadata.chunk_id);
         assert!(queue.is_empty());
@@ -292,19 +289,23 @@ mod tests {
     #[test]
     fn test_priority_ordering() {
         let queue = PriorityQueue::new(1000);
-        
+
         // Enqueue in mixed order
-        queue.enqueue(create_test_chunk(Priority::Normal, 0)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Critical, 1)).unwrap();
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 0))
+            .unwrap();
+        queue
+            .enqueue(create_test_chunk(Priority::Critical, 1))
+            .unwrap();
         queue.enqueue(create_test_chunk(Priority::High, 2)).unwrap();
-        
+
         // Should dequeue in priority order: Critical -> High -> Normal
         let chunk1 = queue.dequeue().unwrap();
         assert_eq!(chunk1.metadata.priority, Priority::Critical);
-        
+
         let chunk2 = queue.dequeue().unwrap();
         assert_eq!(chunk2.metadata.priority, Priority::High);
-        
+
         let chunk3 = queue.dequeue().unwrap();
         assert_eq!(chunk3.metadata.priority, Priority::Normal);
     }
@@ -312,19 +313,25 @@ mod tests {
     #[test]
     fn test_sequence_ordering_within_priority() {
         let queue = PriorityQueue::new(1000);
-        
+
         // Enqueue same priority, different sequences
-        queue.enqueue(create_test_chunk(Priority::Normal, 5)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 2)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 8)).unwrap();
-        
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 5))
+            .unwrap();
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 2))
+            .unwrap();
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 8))
+            .unwrap();
+
         // Should dequeue in sequence order: 2, 5, 8
         let chunk1 = queue.dequeue().unwrap();
         assert_eq!(chunk1.metadata.sequence_number, 2);
-        
+
         let chunk2 = queue.dequeue().unwrap();
         assert_eq!(chunk2.metadata.sequence_number, 5);
-        
+
         let chunk3 = queue.dequeue().unwrap();
         assert_eq!(chunk3.metadata.sequence_number, 8);
     }
@@ -332,11 +339,17 @@ mod tests {
     #[test]
     fn test_queue_capacity() {
         let queue = PriorityQueue::new(3);
-        
-        queue.enqueue(create_test_chunk(Priority::Normal, 0)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 1)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 2)).unwrap();
-        
+
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 0))
+            .unwrap();
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 1))
+            .unwrap();
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 2))
+            .unwrap();
+
         // Should fail on 4th enqueue
         let result = queue.enqueue(create_test_chunk(Priority::Normal, 3));
         assert!(matches!(result, Err(QueueError::QueueFull(_))));
@@ -352,17 +365,21 @@ mod tests {
     #[test]
     fn test_stats_tracking() {
         let queue = PriorityQueue::new(1000);
-        
-        queue.enqueue(create_test_chunk(Priority::Critical, 0)).unwrap();
+
+        queue
+            .enqueue(create_test_chunk(Priority::Critical, 0))
+            .unwrap();
         queue.enqueue(create_test_chunk(Priority::High, 1)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 2)).unwrap();
-        
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 2))
+            .unwrap();
+
         let stats = queue.stats();
         assert_eq!(stats.critical_pending, 1);
         assert_eq!(stats.high_pending, 1);
         assert_eq!(stats.normal_pending, 1);
         assert_eq!(stats.total_enqueued, 3);
-        
+
         queue.dequeue().unwrap();
         let stats = queue.stats();
         assert_eq!(stats.critical_pending, 0);
@@ -372,14 +389,18 @@ mod tests {
     #[test]
     fn test_bandwidth_allocation() {
         let queue = PriorityQueue::new(1000);
-        
+
         // Add chunks to all priorities
-        queue.enqueue(create_test_chunk(Priority::Critical, 0)).unwrap();
+        queue
+            .enqueue(create_test_chunk(Priority::Critical, 0))
+            .unwrap();
         queue.enqueue(create_test_chunk(Priority::High, 1)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 2)).unwrap();
-        
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 2))
+            .unwrap();
+
         let allocation = queue.allocate_bandwidth(1_000_000);
-        
+
         // Should allocate: 50% critical, 30% high, 20% normal
         assert_eq!(allocation.critical_bps, 500_000);
         assert_eq!(allocation.high_bps, 300_000);
@@ -390,12 +411,14 @@ mod tests {
     #[test]
     fn test_bandwidth_redistribution() {
         let queue = PriorityQueue::new(1000);
-        
+
         // Only add normal priority chunks
-        queue.enqueue(create_test_chunk(Priority::Normal, 0)).unwrap();
-        
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 0))
+            .unwrap();
+
         let allocation = queue.allocate_bandwidth(1_000_000);
-        
+
         // Critical and high bandwidth should be redistributed to others
         // When critical and high are empty, their bandwidth gets split
         // Critical's 500k gets split: 250k to high, 250k to normal
@@ -409,14 +432,18 @@ mod tests {
     #[test]
     fn test_dequeue_specific_priority() {
         let queue = PriorityQueue::new(1000);
-        
-        queue.enqueue(create_test_chunk(Priority::Critical, 0)).unwrap();
+
+        queue
+            .enqueue(create_test_chunk(Priority::Critical, 0))
+            .unwrap();
         queue.enqueue(create_test_chunk(Priority::High, 1)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 2)).unwrap();
-        
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 2))
+            .unwrap();
+
         let high_chunk = queue.dequeue_priority(Priority::High).unwrap();
         assert_eq!(high_chunk.metadata.priority, Priority::High);
-        
+
         // Critical and Normal should still be there
         assert_eq!(queue.pending_count(Priority::Critical), 1);
         assert_eq!(queue.pending_count(Priority::Normal), 1);
@@ -425,15 +452,19 @@ mod tests {
     #[test]
     fn test_clear() {
         let queue = PriorityQueue::new(1000);
-        
-        queue.enqueue(create_test_chunk(Priority::Critical, 0)).unwrap();
+
+        queue
+            .enqueue(create_test_chunk(Priority::Critical, 0))
+            .unwrap();
         queue.enqueue(create_test_chunk(Priority::High, 1)).unwrap();
-        queue.enqueue(create_test_chunk(Priority::Normal, 2)).unwrap();
-        
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 2))
+            .unwrap();
+
         assert_eq!(queue.total_pending(), 3);
-        
+
         queue.clear();
-        
+
         assert_eq!(queue.total_pending(), 0);
         assert!(queue.is_empty());
     }
@@ -441,15 +472,19 @@ mod tests {
     #[test]
     fn test_peek() {
         let queue = PriorityQueue::new(1000);
-        
+
         assert!(queue.peek().is_none());
-        
-        queue.enqueue(create_test_chunk(Priority::Normal, 0)).unwrap();
+
+        queue
+            .enqueue(create_test_chunk(Priority::Normal, 0))
+            .unwrap();
         assert_eq!(queue.peek(), Some(Priority::Normal));
-        
-        queue.enqueue(create_test_chunk(Priority::Critical, 1)).unwrap();
+
+        queue
+            .enqueue(create_test_chunk(Priority::Critical, 1))
+            .unwrap();
         assert_eq!(queue.peek(), Some(Priority::Critical));
-        
+
         // Peek shouldn't remove
         assert_eq!(queue.total_pending(), 2);
     }
@@ -457,11 +492,13 @@ mod tests {
     #[test]
     fn test_capacity_info() {
         let queue = PriorityQueue::new(100);
-        
+
         for i in 0..25 {
-            queue.enqueue(create_test_chunk(Priority::Normal, i)).unwrap();
+            queue
+                .enqueue(create_test_chunk(Priority::Normal, i))
+                .unwrap();
         }
-        
+
         let (used, available, utilization) = queue.capacity_info();
         assert_eq!(used, 25);
         assert_eq!(available, 75);
@@ -472,11 +509,11 @@ mod tests {
     async fn test_requeue_with_backoff() {
         let queue = PriorityQueue::new(1000);
         let chunk = create_test_chunk(Priority::Normal, 0);
-        
+
         let start = std::time::Instant::now();
-        queue.requeue(chunk, 2).await.unwrap();  // 2^2 * 100ms = 400ms
+        queue.requeue(chunk, 2).await.unwrap(); // 2^2 * 100ms = 400ms
         let elapsed = start.elapsed();
-        
+
         assert!(elapsed >= Duration::from_millis(400));
         assert_eq!(queue.total_pending(), 1);
     }
@@ -485,7 +522,7 @@ mod tests {
     async fn test_max_retries() {
         let queue = PriorityQueue::new(1000);
         let chunk = create_test_chunk(Priority::Normal, 0);
-        
+
         let result = queue.requeue(chunk, 5).await;
         assert!(matches!(result, Err(QueueError::MaxRetriesExceeded { .. })));
     }

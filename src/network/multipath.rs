@@ -29,10 +29,10 @@ impl MultiPathManager {
 
         for (idx, local_ip) in local_addrs.iter().enumerate() {
             let local_addr = SocketAddr::new(*local_ip, 0);
-            
+
             paths.push(NetworkPath {
-                path_id: format!("path-{}", idx),
-                interface: format!("if{}", idx),
+                path_id: format!("path-{idx}"),
+                interface: format!("if{idx}"),
                 local_addr,
                 remote_addr,
                 status: PathStatus::Active,
@@ -52,24 +52,24 @@ impl MultiPathManager {
     /// Get local IP addresses
     fn get_local_addresses() -> NetworkResult<Vec<IpAddr>> {
         use socket2::{Domain, Socket, Type};
-        
+
         let mut addrs = Vec::new();
-        
+
         // Try to get local addresses by connecting to a remote address
         // This doesn't actually send data, just determines routing
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
         socket.set_nonblocking(true)?;
-        
+
         // Try to connect to Google DNS (doesn't actually connect for UDP)
         let google_dns: SocketAddr = "8.8.8.8:80".parse().unwrap();
         let _ = socket.connect(&google_dns.into());
-        
+
         if let Ok(local_addr) = socket.local_addr() {
             if let Some(addr) = local_addr.as_socket() {
                 addrs.push(addr.ip());
             }
         }
-        
+
         // Add localhost as fallback
         if addrs.is_empty() {
             addrs.push(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
@@ -81,7 +81,7 @@ impl MultiPathManager {
     /// Select best path based on priority
     pub fn select_path(&self, priority: Priority) -> Option<NetworkPath> {
         let paths = self.paths.read();
-        
+
         let active_paths: Vec<_> = paths
             .iter()
             .filter(|p| matches!(p.status, PathStatus::Active))
@@ -142,22 +142,22 @@ impl MultiPathManager {
     /// Measure RTT to remote address
     pub async fn measure_rtt(&self, remote_addr: SocketAddr) -> NetworkResult<u64> {
         let start = std::time::Instant::now();
-        
+
         // Try to connect (this measures connection establishment time)
         let conn = self.transport.connect(remote_addr).await?;
-        
+
         let rtt = start.elapsed().as_millis() as u64;
-        
+
         // Close connection
         conn.close(0u32.into(), b"rtt measurement");
-        
+
         Ok(rtt)
     }
 
     /// Update path metrics
     pub async fn update_path_metrics(&self, path_id: &str, metrics: PathMetrics) {
         let mut paths = self.paths.write();
-        
+
         if let Some(path) = paths.iter_mut().find(|p| p.path_id == path_id) {
             // Update status based on metrics
             if metrics.loss_rate > 0.5 {
@@ -167,7 +167,7 @@ impl MultiPathManager {
             } else {
                 path.status = PathStatus::Active;
             }
-            
+
             path.metrics = metrics;
         }
     }
@@ -189,7 +189,7 @@ impl MultiPathManager {
                         bandwidth_bps: 1_000_000, // Would need bandwidth test
                         last_updated: chrono::Utc::now().timestamp(),
                     };
-                    
+
                     self.update_path_metrics(&path_id, metrics).await;
                 }
             }
@@ -237,7 +237,7 @@ mod tests {
         let config = ConnectionConfig::default();
         let transport = Arc::new(QuicTransport::new(config).await.unwrap());
         let manager = MultiPathManager::new(transport);
-        
+
         assert_eq!(manager.path_count(), 0);
     }
 
@@ -246,10 +246,10 @@ mod tests {
         let config = ConnectionConfig::default();
         let transport = Arc::new(QuicTransport::new(config).await.unwrap());
         let manager = MultiPathManager::new(transport);
-        
+
         let remote_addr = "127.0.0.1:8080".parse().unwrap();
         let paths = manager.discover_paths(remote_addr).await.unwrap();
-        
+
         assert!(!paths.is_empty());
         assert_eq!(manager.path_count(), paths.len());
     }
@@ -259,10 +259,10 @@ mod tests {
         let config = ConnectionConfig::default();
         let transport = Arc::new(QuicTransport::new(config).await.unwrap());
         let manager = MultiPathManager::new(transport);
-        
+
         let remote_addr = "127.0.0.1:8080".parse().unwrap();
         let _ = manager.discover_paths(remote_addr).await;
-        
+
         // Should select a path for critical priority
         let path = manager.select_path(Priority::Critical);
         if manager.path_count() > 0 {
@@ -281,10 +281,10 @@ mod tests {
         let config = ConnectionConfig::default();
         let transport = Arc::new(QuicTransport::new(config).await.unwrap());
         let manager = MultiPathManager::new(transport);
-        
+
         let remote_addr = "127.0.0.1:8080".parse().unwrap();
         let paths = manager.discover_paths(remote_addr).await.unwrap();
-        
+
         if let Some(path) = paths.first() {
             let new_metrics = PathMetrics {
                 rtt_ms: 50,
@@ -292,12 +292,14 @@ mod tests {
                 bandwidth_bps: 1_000_000,
                 last_updated: chrono::Utc::now().timestamp(),
             };
-            
-            manager.update_path_metrics(&path.path_id, new_metrics).await;
-            
+
+            manager
+                .update_path_metrics(&path.path_id, new_metrics)
+                .await;
+
             let updated_paths = manager.get_paths();
             let updated_path = updated_paths.iter().find(|p| p.path_id == path.path_id);
-            
+
             if let Some(p) = updated_path {
                 assert_eq!(p.metrics.rtt_ms, 50);
             }
@@ -309,10 +311,10 @@ mod tests {
         let config = ConnectionConfig::default();
         let transport = Arc::new(QuicTransport::new(config).await.unwrap());
         let manager = MultiPathManager::new(transport);
-        
+
         let remote_addr = "127.0.0.1:8080".parse().unwrap();
         let paths = manager.discover_paths(remote_addr).await.unwrap();
-        
+
         if let Some(path) = paths.first() {
             // High loss rate should mark path as failed
             let failing_metrics = PathMetrics {
@@ -321,12 +323,14 @@ mod tests {
                 bandwidth_bps: 100_000,
                 last_updated: chrono::Utc::now().timestamp(),
             };
-            
-            manager.update_path_metrics(&path.path_id, failing_metrics).await;
-            
+
+            manager
+                .update_path_metrics(&path.path_id, failing_metrics)
+                .await;
+
             let updated_paths = manager.get_paths();
             let updated_path = updated_paths.iter().find(|p| p.path_id == path.path_id);
-            
+
             if let Some(p) = updated_path {
                 assert_eq!(p.status, PathStatus::Failed);
             }

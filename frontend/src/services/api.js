@@ -10,16 +10,15 @@ const api = {
   },
 
   // Upload file and start transfer
-  async uploadAndTransfer(file, priority = 'Normal') {
+  async uploadAndTransfer(file, priority = 'Normal', receiverAddr = null) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('priority', priority);
+    if (receiverAddr) {
+      formData.append('receiver_addr', receiverAddr);
+    }
 
-    const response = await axios.post(`${API_BASE_URL}/api/v1/upload`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await axios.post(`${API_BASE_URL}/api/v1/upload`, formData);
     return response.data;
   },
 

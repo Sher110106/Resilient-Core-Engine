@@ -22,20 +22,35 @@ impl TransferState {
     }
 
     pub fn is_terminal(&self) -> bool {
-        matches!(self, TransferState::Completed | TransferState::Failed { .. })
+        matches!(
+            self,
+            TransferState::Completed | TransferState::Failed { .. }
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum TransferEvent {
-    Start { file_path: PathBuf, priority: crate::chunk::Priority },
-    ChunkCompleted { chunk_number: u32 },
-    ChunkFailed { chunk_number: u32, error: String },
+    Start {
+        file_path: PathBuf,
+        priority: crate::chunk::Priority,
+    },
+    ChunkCompleted {
+        chunk_number: u32,
+    },
+    ChunkFailed {
+        chunk_number: u32,
+        error: String,
+    },
     Pause,
     Resume,
     Cancel,
-    NetworkFailure { path_id: String },
-    NetworkRecovered { path_id: String },
+    NetworkFailure {
+        path_id: String,
+    },
+    NetworkRecovered {
+        path_id: String,
+    },
     TransferComplete,
 }
 

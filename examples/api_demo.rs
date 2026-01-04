@@ -25,13 +25,8 @@ async fn main() {
     let queue = PriorityQueue::new(1_000_000);
     let session_store = SessionStore::new_in_memory().await.unwrap();
 
-    let coordinator = TransferCoordinator::new(
-        chunk_manager,
-        verifier,
-        transport,
-        queue,
-        session_store,
-    );
+    let coordinator =
+        TransferCoordinator::new(chunk_manager, verifier, transport, queue, session_store);
 
     let app = create_api_server(coordinator.clone());
 
@@ -82,7 +77,10 @@ async fn main() {
     println!("\n✅ Response:");
     println!("{{");
     println!("  \"session_id\": \"{}\",", session_id);
-    println!("  \"message\": \"Transfer started with session ID: {}\"", session_id);
+    println!(
+        "  \"message\": \"Transfer started with session ID: {}\"",
+        session_id
+    );
     println!("}}");
 
     sleep(Duration::from_millis(100)).await;
@@ -264,7 +262,10 @@ async fn main() {
                 println!("  \"type\": \"TransferProgress\",");
                 println!("  \"data\": {{");
                 println!("    \"session_id\": \"{}\",", &session_id[..8]);
-                println!("    \"progress_percent\": {:.1},", progress.progress_percent);
+                println!(
+                    "    \"progress_percent\": {:.1},",
+                    progress.progress_percent
+                );
                 println!("    \"status\": \"{:?}\"", progress.status);
                 println!("  }}");
                 println!("}}");
