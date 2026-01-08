@@ -1,65 +1,177 @@
 .receiver-dashboard {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dashboard-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.dashboard-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-primary);
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-indicator.online {
+  background: rgba(102, 187, 106, 0.15);
+  color: var(--status-success);
+}
+
+.status-indicator.offline {
+  background: rgba(239, 83, 80, 0.15);
+  color: var(--status-critical);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-indicator.online .status-dot {
+  background: var(--status-success);
+  animation: signal-pulse 1.5s ease-in-out infinite;
+}
+
+.status-indicator.offline .status-dot {
+  background: var(--status-critical);
 }
 
 .receiver-connection {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
 }
 
 .receiver-connection label {
-  font-weight: 600;
-  color: #fff;
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
 }
 
 .receiver-url-input {
-  flex: 1;
-  min-width: 250px;
-  padding: 10px 15px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  color: #fff;
-  font-size: 14px;
-  transition: all 0.3s ease;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-family: 'Monaco', 'Consolas', monospace;
+  transition: border-color 0.2s ease;
 }
 
 .receiver-url-input:focus {
   outline: none;
-  border-color: #667eea;
-  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--accent-primary);
 }
 
-.status-indicator {
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.status-indicator.online {
-  background: rgba(76, 175, 80, 0.2);
-  color: #4caf50;
-}
-
-.status-indicator.offline {
-  background: rgba(244, 67, 54, 0.2);
-  color: #f44336;
+.receiver-url-input::placeholder {
+  color: var(--text-muted);
 }
 
 .receiver-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
 }
 
 .receiver-stats .stat-card {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.receiver-stats .stat-card:hover {
+  border-color: var(--accent-primary);
+}
+
+.receiver-stats .stat-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 152, 0, 0.1);
+  color: var(--accent-primary);
+}
+
+.stat-icon-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.receiver-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.receiver-stats .stat-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.receiver-stats .stat-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .receiver-stats {
+    grid-template-columns: 1fr;
+  }
 }

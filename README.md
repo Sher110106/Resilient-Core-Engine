@@ -1,22 +1,20 @@
-# ChunkStream Pro
+# RESILIENT: Disaster Data Link
 
-A high-performance, resilient file transfer system built with Rust and React, featuring intelligent chunking, erasure coding, and priority-based delivery over QUIC protocol.
+A resilient, high-performance file transfer system designed for disaster response operations. Built with Rust and React, featuring intelligent chunking, erasure coding, and priority-based delivery over QUIC protocol.
 
 ## Overview
 
-ChunkStream Pro is a production-ready file transfer solution designed for unreliable networks. It splits files into intelligent chunks with erasure coding, allowing successful delivery even when chunks are lost during transmission.
+**RESILIENT** is a production-ready data transmission solution designed for unreliable networks in disaster zones. It splits files into intelligent chunks with erasure coding, allowing successful delivery even when significant data loss occurs during transmission.
 
 ### Key Features
 
-- **🚀 QUIC Protocol**: Modern UDP-based transport with TLS 1.3 encryption
-- **🔧 Intelligent Chunking**: Adaptive chunk sizing based on network conditions
-- **🛡️ Erasure Coding**: Reed-Solomon error correction - recover from 20% chunk loss
-- **⚡ Priority System**: 3-level prioritization (Critical, High, Normal)
-- **🔒 Data Integrity**: BLAKE3 cryptographic hashing for verification
-- **📊 Real-time Monitoring**: WebSocket-based live progress tracking
-- **🌐 Dual Mode UI**: Unified sender/receiver interface
+- **🛰️ QUIC Protocol**: Modern UDP-based transport with TLS 1.3 encryption
+- **⚡ Erasure Coding**: Reed-Solomon error correction - recover from 20% chunk loss
+- **🎯 Priority System**: 3-level prioritization (Critical, High, Normal)
+- **🔒 BLAKE3 Integrity**: Cryptographic hashing for data verification
+- **📡 Real-time Monitoring**: WebSocket-based live progress tracking
+- **🖥️ Dual Mode UI**: Field Agent (sender) / Command Center (receiver)
 - **🔄 Transfer Controls**: Pause, resume, and cancel operations
-- **💾 Session Persistence**: SQLite-backed transfer state management
 
 ## Architecture
 
@@ -24,7 +22,7 @@ ChunkStream Pro is a production-ready file transfer solution designed for unreli
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Frontend (React)                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │ Sender Mode  │  │ Receiver Mode │  │ Real-time Dashboard  │  │
+│  │ Field Agent  │  │Command Center│  │ Real-time Dashboard  │  │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘  │
 └────────────────────────────┬────────────────────────────────────┘
                              │ HTTP/WebSocket
@@ -58,7 +56,7 @@ ChunkStream Pro is a production-ready file transfer solution designed for unreli
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd chunkstream_pro
+cd resilient
 
 # Build the backend (release mode)
 cargo build --release
@@ -71,24 +69,24 @@ cd ..
 
 ### Running the System
 
-#### 1. Start the Sender Server
+#### 1. Start the Command Center (Receiver)
+
+```bash
+./target/release/chunkstream-receiver 0.0.0.0:5001 ./received
+```
+
+Command Center will:
+- Listen on port `5001` for QUIC connections
+- Save files to `./received` directory
+- Expose REST API on `http://localhost:8080`
+
+#### 2. Start the Field Agent Server (Sender)
 
 ```bash
 ./target/release/chunkstream-server
 ```
 
 Server will start on `http://localhost:3000`
-
-#### 2. Start the Receiver Agent
-
-```bash
-./target/release/chunkstream-receiver 0.0.0.0:5001 ./received
-```
-
-Receiver will:
-- Listen on port `5001` for QUIC connections
-- Save files to `./received` directory
-- Expose REST API on `http://localhost:8080`
 
 #### 3. Start the Frontend
 
@@ -101,114 +99,52 @@ Web interface will open at `http://localhost:3001`
 
 ### Basic Usage
 
-#### Sender Mode (Upload & Transfer)
+#### Field Agent Mode (Transmit Data)
 
 1. Open `http://localhost:3001` in your browser
-2. Switch to **Sender Mode** (📤)
-3. Drag & drop a file or click to browse
+2. You are in **Field Agent** mode by default
+3. Drag & drop a mission-critical file or click to browse
 4. Set transfer priority (Critical/High/Normal)
-5. Enter receiver address (default: `127.0.0.1:5001`)
-6. Click **Start Transfer**
+5. Enter Command Center address (default: `127.0.0.1:5001`)
+6. Click **Initiate Secure Transmission**
 7. Monitor real-time progress
 
-#### Receiver Mode (Monitor Incoming)
+#### Command Center Mode (Receive Intel)
 
-1. Switch to **Receiver Mode** (📥)
-2. View list of received files
+1. Click **Command Center** button
+2. View list of received intelligence
 3. See transfer statistics and completion status
-4. Download received files
+4. Verify BLAKE3 integrity of received files
+5. Retrieve/download received files
 
-### API Usage
+## Use Case: Disaster Response
 
-#### REST API
+RESILIENT is designed for scenarios where reliable data transmission is critical:
 
-```bash
-# Upload and start transfer
-curl -X POST http://localhost:3000/api/v1/upload \
-  -F "file=@/path/to/file.pdf" \
-  -F "priority=High" \
-  -F "receiver_addr=127.0.0.1:5001"
+**Scenario**: A flood zone where cell towers are overloaded
 
-# List active transfers
-curl http://localhost:3000/api/v1/transfers
+1. **Field Agent** (volunteer on the ground) has a list of 20 people trapped
+2. Normal apps fail due to high packet loss
+3. RESILIENT uses erasure coding to reconstruct data from partial transmissions
+4. **Command Center** (coordination hub) receives the complete victim list
+5. BLAKE3 verification ensures data integrity
+6. Rescue operations can proceed with accurate information
 
-# Get transfer progress
-curl http://localhost:3000/api/v1/transfers/{session_id}/progress
+## Demo Data
 
-# Pause transfer
-curl -X POST http://localhost:3000/api/v1/transfers/{session_id}/pause
+The `uploads/` directory contains demo files for testing:
 
-# Resume transfer
-curl -X POST http://localhost:3000/api/v1/transfers/{session_id}/resume
-
-# Cancel transfer
-curl -X POST http://localhost:3000/api/v1/transfers/{session_id}/cancel
-```
-
-#### WebSocket (Real-time Updates)
-
-```javascript
-const ws = new WebSocket('ws://localhost:3000/ws');
-
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-  console.log('Transfer update:', message);
-};
-```
-
-## Configuration
-
-### Chunk Manager Settings
-
-Edit `src/bin/server.rs`:
-
-```rust
-// Current: 512KB chunks, 50 data + 10 parity shards
-let chunk_manager = ChunkManager::new(512 * 1024, 50, 10)?;
-
-// For smaller files: 256KB chunks, 20 data + 5 parity
-let chunk_manager = ChunkManager::new(256 * 1024, 20, 5)?;
-
-// For larger files: 1MB chunks, 100 data + 20 parity
-let chunk_manager = ChunkManager::new(1024 * 1024, 100, 20)?;
-```
-
-### Network Configuration
-
-Edit `src/network/types.rs`:
-
-```rust
-pub struct ConnectionConfig {
-    pub bind_addr: SocketAddr,
-    pub max_concurrent_streams: u32,  // Default: 100
-    pub idle_timeout_secs: u64,       // Default: 60
-    pub keep_alive_interval_secs: u64,// Default: 5
-}
-```
-
-### Server Port
-
-Change bind address in `src/bin/server.rs`:
-
-```rust
-let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-```
+- `Sector4_Victims.csv` - Sample victim data for disaster response demos
 
 ## Testing
 
 ```bash
-# Run all tests
-cargo test
+# Build release binaries
+cargo build --release
 
-# Run specific test module
-cargo test chunk::tests
-
-# Run with output
-cargo test -- --nocapture
-
-# Run examples
-cargo run --example chunk_demo
-cargo run --example coordinator_demo
+# Run frontend for manual testing
+cd frontend
+npm start
 ```
 
 ## Performance
@@ -219,94 +155,21 @@ cargo run --example coordinator_demo
 - **Chunk Processing**: 100,000+ chunks/second
 - **Latency**: <10ms chunk encode/decode
 - **Recovery**: Successfully reconstructs files with 20% chunk loss
-- **Concurrent Transfers**: 1000+ simultaneous sessions
-
-## Project Structure
-
-```
-chunkstream_pro/
-├── src/
-│   ├── api/              # REST & WebSocket API
-│   ├── chunk/            # Chunking & erasure coding
-│   ├── coordinator/      # Transfer orchestration
-│   ├── integrity/        # BLAKE3 verification
-│   ├── network/          # QUIC transport
-│   ├── priority/         # Priority queue system
-│   ├── session/          # Session management
-│   └── bin/
-│       ├── server.rs     # Sender server
-│       └── receiver.rs   # Receiver agent
-├── frontend/
-│   ├── src/
-│   │   ├── components/   # React components
-│   │   └── services/     # API clients
-│   └── package.json
-├── examples/             # Demo programs
-├── tests/                # Integration tests
-├── Cargo.toml
-└── README.md
-```
-
-## Documentation
-
-- **[TECHNICAL.md](TECHNICAL.md)** - Detailed architecture and implementation
-- **[TESTING.md](TESTING.md)** - Testing guide and strategies
 
 ## Security Considerations
 
-⚠️ **Development Mode**: This project currently uses self-signed certificates and skips certificate verification for testing purposes.
+⚠️ **Development Mode**: This project currently uses self-signed certificates for testing purposes.
 
 **For Production**:
 - Replace self-signed certificates with CA-signed certificates
 - Enable proper certificate verification
 - Implement authentication/authorization
-- Add rate limiting and DDoS protection
-- Enable TLS certificate pinning
-- Audit all security dependencies
-
-## Troubleshooting
-
-### Port Already in Use
-
-```bash
-# Find process using port 3000
-lsof -i :3000
-
-# Kill the process
-kill -9 <PID>
-```
-
-### File Upload Fails
-
-- Check server logs for errors
-- Ensure body size limit is sufficient (default: 100MB)
-- Verify file permissions in upload directory
-
-### Connection Refused
-
-- Ensure receiver is running on specified address
-- Check firewall settings
-- Verify QUIC/UDP ports are not blocked
-
-## Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Run tests: `cargo test`
-4. Format code: `cargo fmt`
-5. Check lints: `cargo clippy`
-6. Submit a pull request
+- Add rate limiting
 
 ## License
 
 This project is provided as-is for educational and development purposes.
 
-## Authors
-
-Built with ❤️ using Rust and React.
-
 ---
 
-**Note**: This is a development version. For production use, implement proper security measures, authentication, and certificate management.
+**RESILIENT v1.0.0** — Powered by QUIC Protocol with Erasure Coding

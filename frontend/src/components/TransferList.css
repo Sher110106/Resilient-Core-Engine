@@ -1,59 +1,90 @@
 .transfer-list-container {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
 }
 
 .transfer-list-container h2 {
-  margin-bottom: 1.5rem;
-  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.transfer-list-container h2 .status-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-primary);
 }
 
 .empty-state {
   text-align: center;
-  padding: 3rem 2rem;
-  color: #666;
+  padding: 3rem;
+  color: var(--text-secondary);
 }
 
-.empty-icon {
-  font-size: 4rem;
-  display: block;
+.empty-icon-svg {
+  width: 64px;
+  height: 64px;
+  color: var(--text-muted);
   margin-bottom: 1rem;
 }
 
 .empty-state p {
-  margin: 0.5rem 0;
   font-size: 1.1rem;
+  margin-bottom: 0.5rem;
 }
 
 .empty-hint {
-  font-size: 0.9rem;
-  opacity: 0.7;
+  font-size: 0.875rem !important;
+  color: var(--text-muted) !important;
 }
 
 .transfer-list {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .transfer-item {
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 1.5rem;
-  transition: box-shadow 0.3s;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: all 0.3s ease;
 }
 
 .transfer-item:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent-primary);
+}
+
+.transfer-item.status-active {
+  border-left: 3px solid var(--accent-primary);
+}
+
+.transfer-item.status-completed {
+  border-left: 3px solid var(--status-success);
+}
+
+.transfer-item.status-paused {
+  border-left: 3px solid var(--status-warning);
+}
+
+.transfer-item.status-failed {
+  border-left: 3px solid var(--status-critical);
 }
 
 .transfer-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .transfer-id {
@@ -63,129 +94,165 @@
 }
 
 .id-label {
-  font-weight: bold;
-  color: #666;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .id-value {
-  font-family: monospace;
-  color: #333;
-  background: #f0f0f0;
-  padding: 0.25rem 0.5rem;
+  color: var(--text-primary);
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.9rem;
+  background: var(--bg-secondary);
+  padding: 0.2rem 0.5rem;
   border-radius: 4px;
 }
 
 .transfer-status {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  font-weight: bold;
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.status-active {
-  background: #e6f7ff;
-  color: #1890ff;
+.transfer-status.status-active {
+  background: rgba(255, 152, 0, 0.15);
+  color: var(--accent-primary);
 }
 
-.status-completed {
-  background: #f6ffed;
-  color: #52c41a;
+.transfer-status.status-completed {
+  background: rgba(102, 187, 106, 0.15);
+  color: var(--status-success);
 }
 
-.status-paused {
-  background: #fff7e6;
-  color: #fa8c16;
+.transfer-status.status-paused {
+  background: rgba(255, 167, 38, 0.15);
+  color: var(--status-warning);
 }
 
-.status-failed {
-  background: #fff1f0;
-  color: #f5222d;
+.transfer-status.status-failed {
+  background: rgba(239, 83, 80, 0.15);
+  color: var(--status-critical);
 }
 
-.status-default {
-  background: #f0f0f0;
-  color: #666;
+.status-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 152, 0, 0.1);
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+}
+
+.signal-pulse {
+  animation: signal-pulse 1s ease-in-out infinite;
+  color: var(--accent-primary);
 }
 
 .transfer-progress {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   margin-bottom: 1rem;
 }
 
 .progress-bar-container {
-  width: 100%;
-  height: 30px;
-  background: #f0f0f0;
-  border-radius: 15px;
+  flex: 1;
+  height: 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
   overflow: hidden;
-  position: relative;
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  border-radius: 4px;
   transition: width 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 50px;
+}
+
+.progress-bar-fill.animated {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 40px 40px;
+  animation: progress-stripe 1s linear infinite;
 }
 
 .progress-text {
-  color: white;
-  font-weight: bold;
+  color: var(--text-primary);
+  font-weight: 600;
   font-size: 0.9rem;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  min-width: 50px;
+  text-align: right;
 }
 
 .transfer-details {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 8px;
   margin-bottom: 1rem;
-  padding: 1rem;
-  background: #f9f9f9;
-  border-radius: 6px;
 }
 
 .detail-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  text-align: center;
 }
 
 .detail-label {
-  font-size: 0.85rem;
-  color: #666;
-  font-weight: 600;
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
 }
 
 .detail-value {
-  font-size: 1rem;
-  color: #333;
+  color: var(--text-primary);
+  font-size: 0.85rem;
   font-weight: 500;
 }
 
 .transfer-actions {
   display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .action-button {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  flex: 1;
-  min-width: 100px;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 .action-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .action-button:disabled {
@@ -193,45 +260,40 @@
   cursor: not-allowed;
 }
 
-.pause-button {
-  background: #ffa500;
-  color: white;
+.action-icon {
+  width: 14px;
+  height: 14px;
 }
 
-.resume-button {
-  background: #4caf50;
-  color: white;
+.pause-button:hover:not(:disabled) {
+  background: rgba(255, 167, 38, 0.15);
+  border-color: var(--status-warning);
+  color: var(--status-warning);
 }
 
-.cancel-button {
-  background: #f44336;
-  color: white;
+.resume-button:hover:not(:disabled) {
+  background: rgba(102, 187, 106, 0.15);
+  border-color: var(--status-success);
+  color: var(--status-success);
 }
 
-@media (max-width: 768px) {
-  .transfer-list-container {
-    padding: 1.5rem;
-  }
-  
-  .transfer-item {
-    padding: 1rem;
-  }
-  
-  .transfer-header {
-    flex-direction: column;
-    align-items: flex-start;
+.cancel-button:hover:not(:disabled) {
+  background: rgba(239, 83, 80, 0.15);
+  border-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+@media (max-width: 600px) {
+  .transfer-details {
+    grid-template-columns: 1fr;
     gap: 0.5rem;
   }
   
-  .transfer-details {
-    grid-template-columns: 1fr;
-  }
-  
   .transfer-actions {
-    flex-direction: column;
+    flex-wrap: wrap;
   }
   
   .action-button {
-    width: 100%;
+    min-width: calc(50% - 0.25rem);
   }
 }

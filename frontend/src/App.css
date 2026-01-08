@@ -2,24 +2,39 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--bg-primary);
 }
 
 .App-header {
-  background: rgba(255, 255, 255, 0.95);
-  padding: 2rem;
+  background: var(--bg-secondary);
+  padding: 1.5rem 2rem;
   text-align: center;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
 }
 
 .App-header h1 {
-  font-size: 2.5rem;
-  color: #667eea;
-  margin-bottom: 0.5rem;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  letter-spacing: -0.5px;
+}
+
+.App-header h1 .header-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--accent-primary);
 }
 
 .App-header p {
-  color: #666;
-  font-size: 1.1rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 400;
 }
 
 .App-main {
@@ -31,17 +46,26 @@
 }
 
 .App-footer {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--bg-secondary);
   padding: 1rem;
   text-align: center;
-  color: #666;
-  font-size: 0.9rem;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.App-footer a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.App-footer a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {
   .App-header h1 {
-    font-size: 1.8rem;
+    font-size: 1.5rem;
   }
   
   .App-main {
