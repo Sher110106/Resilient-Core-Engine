@@ -186,6 +186,7 @@ function TransferList({ transfers, onPause, onResume, onCancel }) {
                     onCancel(transfer.session_id);
                   }
                 }}
+                disabled={transfer.status === 'Completed' || (typeof transfer.status === 'object' && transfer.status.Failed)}
                 title="Abort Mission"
               >
                 <CancelIcon />

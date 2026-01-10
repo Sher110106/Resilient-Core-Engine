@@ -168,7 +168,7 @@ impl TransferCoordinator {
             .get(session_id)
             .ok_or_else(|| CoordinatorError::TransferNotFound(session_id.to_string()))?;
 
-        state_machine.send_event(TransferEvent::Pause)?;
+        state_machine.transition(TransferEvent::Pause)?;
         self.session_store
             .update_status(session_id, SessionStatus::Paused)
             .await?;
@@ -179,7 +179,7 @@ impl TransferCoordinator {
     /// Cancel a transfer
     pub async fn cancel_transfer(&self, session_id: &str) -> CoordinatorResult<()> {
         if let Some(state_machine) = self.active_transfers.get(session_id) {
-            state_machine.send_event(TransferEvent::Cancel)?;
+            state_machine.transition(TransferEvent::Cancel)?;
         }
 
         self.session_store

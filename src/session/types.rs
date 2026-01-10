@@ -53,9 +53,13 @@ impl SessionState {
     }
 
     pub fn progress_percent(&self) -> f32 {
-        let total = self.manifest.data_chunks as f32;
+        let total = self.manifest.total_chunks as f32;
+        if total == 0.0 {
+            return 0.0;
+        }
         let completed = self.completed_chunks.len() as f32;
-        (completed / total) * 100.0
+        let percent = (completed / total) * 100.0;
+        percent.min(100.0)
     }
 
     pub fn remaining_chunks(&self) -> Vec<u32> {
