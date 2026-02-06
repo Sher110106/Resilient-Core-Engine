@@ -51,9 +51,9 @@ async fn upload_and_transfer(
 
     // Create uploads directory if it doesn't exist
     let upload_dir = std::path::PathBuf::from("./uploads");
-    tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| {
-        ApiError::InternalError(format!("Failed to create uploads directory: {e}"))
-    })?;
+    tokio::fs::create_dir_all(&upload_dir)
+        .await
+        .map_err(|e| ApiError::InternalError(format!("Failed to create uploads directory: {e}")))?;
 
     while let Some(field) = multipart
         .next_field()
@@ -69,9 +69,10 @@ async fn upload_and_transfer(
                 .to_string();
 
             let filepath = upload_dir.join(&filename);
-            let data = field.bytes().await.map_err(|e| {
-                ApiError::InvalidRequest(format!("Failed to read file data: {e}"))
-            })?;
+            let data = field
+                .bytes()
+                .await
+                .map_err(|e| ApiError::InvalidRequest(format!("Failed to read file data: {e}")))?;
 
             let mut file = File::create(&filepath)
                 .await
@@ -99,9 +100,10 @@ async fn upload_and_transfer(
                 ApiError::InvalidRequest(format!("Failed to read receiver address: {e}"))
             })?;
 
-            receiver_addr = Some(addr_str.parse().map_err(|e| {
-                ApiError::InvalidRequest(format!("Invalid receiver address: {e}"))
-            })?);
+            receiver_addr =
+                Some(addr_str.parse().map_err(|e| {
+                    ApiError::InvalidRequest(format!("Invalid receiver address: {e}"))
+                })?);
         }
     }
 
@@ -117,9 +119,7 @@ async fn upload_and_transfer(
         StatusCode::CREATED,
         Json(StartTransferResponse {
             session_id: session_id.clone(),
-            message: format!(
-                "File uploaded and transfer started with session ID: {session_id}"
-            ),
+            message: format!("File uploaded and transfer started with session ID: {session_id}"),
         }),
     ))
 }
@@ -138,14 +138,15 @@ async fn start_transfer(
     }
 
     // Parse receiver address if provided
-    let receiver_addr =
-        if let Some(addr_str) = &req.receiver_addr {
-            Some(addr_str.parse().map_err(|e| {
-                ApiError::InvalidRequest(format!("Invalid receiver address: {e}"))
-            })?)
-        } else {
-            None
-        };
+    let receiver_addr = if let Some(addr_str) = &req.receiver_addr {
+        Some(
+            addr_str
+                .parse()
+                .map_err(|e| ApiError::InvalidRequest(format!("Invalid receiver address: {e}")))?,
+        )
+    } else {
+        None
+    };
 
     let session_id = coordinator
         .send_file(file_path, req.priority, receiver_addr)

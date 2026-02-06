@@ -69,9 +69,15 @@ impl TransferCoordinator {
             .split_file(&file_path, file_id.clone(), priority)
             .await?;
 
-        // Create session
+        // Create session with receiver address and file path for resumable transfers
         let session_id = uuid::Uuid::new_v4().to_string();
-        let session = SessionState::new(session_id.clone(), file_id.clone(), manifest.clone());
+        let session = SessionState::new_with_receiver(
+            session_id.clone(),
+            file_id.clone(),
+            manifest.clone(),
+            receiver_addr,
+            Some(file_path.to_string_lossy().to_string()),
+        );
         self.session_store.save(&session).await?;
 
         // Update session status to active
@@ -143,15 +149,46 @@ impl TransferCoordinator {
             .update_status(session_id, SessionStatus::Active)
             .await?;
 
+        // Re-read chunks from the original file if we have the file path
+        let chunks = if let Some(ref file_path_str) = session.file_path {
+            let file_path = PathBuf::from(file_path_str);
+            if file_path.exists() {
+                // Re-split the file to get chunks (only the remaining ones will be sent)
+                match self
+                    .chunk_manager
+                    .split_file(
+                        &file_path,
+                        session.file_id.clone(),
+                        session.manifest.priority,
+                    )
+                    .await
+                {
+                    Ok((_, chunks)) => chunks,
+                    Err(e) => {
+                        tracing::warn!("Failed to re-read file for resume: {}", e);
+                        vec![]
+                    }
+                }
+            } else {
+                tracing::warn!("Original file not found for resume: {}", file_path_str);
+                vec![]
+            }
+        } else {
+            tracing::warn!("No file path stored in session, cannot re-read chunks for resume");
+            vec![]
+        };
+
+        // Use stored receiver address for resume
+        let receiver_addr = session.receiver_addr;
+
         // Start transfer worker
         let coordinator = self.clone();
         let session_id_str = session_id.to_string();
         let manifest = session.manifest.clone();
-        // Resume doesn't have chunks, so pass empty vec (worker will skip enqueueing)
-        // TODO: We don't have receiver_addr stored in session, so resume won't work for network transfers
+
         tokio::spawn(async move {
             if let Err(e) = coordinator
-                .transfer_worker(session_id_str.clone(), manifest, vec![], None)
+                .transfer_worker(session_id_str.clone(), manifest, chunks, receiver_addr)
                 .await
             {
                 eprintln!("Transfer worker failed for {session_id_str}: {e}");
@@ -203,17 +240,17 @@ impl TransferCoordinator {
 
         let completed = session.completed_chunks.len() as u32;
         let total = session.manifest.total_chunks;
-        let bytes_per_chunk = session.manifest.chunk_size as u64;
+        let speed = session.current_speed_bps();
 
         Ok(TransferProgress {
             session_id: session_id.to_string(),
             completed_chunks: completed,
             total_chunks: total,
-            bytes_transferred: completed as u64 * bytes_per_chunk,
+            bytes_transferred: session.metrics.bytes_transferred,
             total_bytes: session.manifest.total_size,
             progress_percent: session.progress_percent(),
             status: session.status,
-            current_speed_bps: 0, // Would calculate from real metrics
+            current_speed_bps: speed,
         })
     }
 
@@ -312,6 +349,7 @@ impl TransferCoordinator {
             match self.queue.dequeue() {
                 Ok(chunk) => {
                     let chunk_num = chunk.metadata.sequence_number;
+                    let chunk_bytes = chunk.data.len() as u64;
 
                     // Actually send chunk over network (if connection established)
                     if let Some(ref conn) = connection {
@@ -329,9 +367,9 @@ impl TransferCoordinator {
                         time::sleep(Duration::from_millis(10)).await;
                     }
 
-                    // Mark as completed
+                    // Mark as completed with actual bytes transferred
                     self.session_store
-                        .mark_chunk_completed(&session_id, chunk_num)
+                        .mark_chunk_completed_with_bytes(&session_id, chunk_num, chunk_bytes)
                         .await?;
 
                     // Update state
@@ -392,6 +430,7 @@ impl Clone for TransferCoordinator {
 mod tests {
     use super::*;
     use std::io::Write;
+    #[allow(unused_imports)]
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
 

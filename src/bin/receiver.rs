@@ -136,7 +136,7 @@ async fn handle_transfer(
     conn: quinn::Connection,
     transport: Arc<QuicTransport>,
     chunk_manager: Arc<ChunkManager>,
-    verifier: Arc<IntegrityVerifier>,
+    _verifier: Arc<IntegrityVerifier>,
     save_dir: PathBuf,
     active_transfers: Arc<Mutex<HashMap<String, (FileManifest, Vec<Chunk>)>>>,
     received_files: Arc<Mutex<Vec<ReceivedFileInfo>>>,
@@ -296,7 +296,7 @@ async fn handle_transfer(
                     }
                 }
             }
-            Err(e) => {
+            Err(_e) => {
                 // Connection closed or error
                 if chunk_count > 0 {
                     println!(
@@ -343,8 +343,10 @@ struct ReceiverStatus {
 #[derive(Clone)]
 struct ReceiverApiState {
     received_files: Arc<Mutex<Vec<ReceivedFileInfo>>>,
+    #[allow(dead_code)]
     save_dir: PathBuf,
     bind_addr: SocketAddr,
+    #[allow(dead_code)]
     tx: broadcast::Sender<String>,
 }
 

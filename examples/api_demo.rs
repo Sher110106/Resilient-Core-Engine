@@ -28,7 +28,7 @@ async fn main() {
     let coordinator =
         TransferCoordinator::new(chunk_manager, verifier, transport, queue, session_store);
 
-    let app = create_api_server(coordinator.clone());
+    let _app = create_api_server(coordinator.clone());
 
     println!("✅ API server created successfully");
     println!("   Available endpoints:");
@@ -56,9 +56,10 @@ async fn main() {
     println!("Created test file: {}", file_path.display());
     println!("File size: {} bytes", test_data.len());
 
-    let request = StartTransferRequest {
+    let _request = StartTransferRequest {
         file_path: file_path.to_string_lossy().to_string(),
         priority: Priority::High,
+        receiver_addr: None,
     };
 
     println!("\nSimulating REST API call:");
@@ -70,7 +71,7 @@ async fn main() {
 
     // Simulate the API call by directly calling the coordinator
     let session_id = coordinator
-        .send_file(file_path.clone(), Priority::High)
+        .send_file(file_path.clone(), Priority::High, None)
         .await
         .unwrap();
 
@@ -120,7 +121,7 @@ async fn main() {
     test_file2.flush().unwrap();
 
     let session_id2 = coordinator
-        .send_file(test_file2.path().to_path_buf(), Priority::Normal)
+        .send_file(test_file2.path().to_path_buf(), Priority::Normal, None)
         .await
         .unwrap();
 
@@ -224,7 +225,7 @@ async fn main() {
     test_file3.flush().unwrap();
 
     let session_id3 = coordinator
-        .send_file(test_file3.path().to_path_buf(), Priority::Normal)
+        .send_file(test_file3.path().to_path_buf(), Priority::Normal, None)
         .await
         .unwrap();
 

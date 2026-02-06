@@ -4,4 +4,4 @@ pub mod types;
 
 pub use error::{SessionError, SessionResult};
 pub use store::SessionStore;
-pub use types::{ResumeInfo, SessionState, SessionStatus, SessionSummary};
+pub use types::{ResumeInfo, SessionState, SessionStatus, SessionSummary, TransferMetrics};

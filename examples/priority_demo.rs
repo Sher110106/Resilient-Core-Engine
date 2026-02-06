@@ -15,6 +15,9 @@ fn create_test_chunk(priority: Priority, seq: u32, data: &str) -> Chunk {
             is_parity: false,
             priority,
             created_at: chrono::Utc::now().timestamp(),
+            file_size: 100 * data.len() as u64,
+            file_checksum: [0u8; 32],
+            data_chunks: 80,
         },
         data: Bytes::from(data.to_owned()),
     }

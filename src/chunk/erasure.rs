@@ -166,7 +166,7 @@ mod tests {
         ];
 
         // Encode
-        let mut encoded = coder.encode(data.clone()).unwrap();
+        let encoded = coder.encode(data.clone()).unwrap();
 
         // Simulate loss of 2 chunks
         let mut to_decode: Vec<Option<Bytes>> = encoded.into_iter().map(Some).collect();
@@ -189,7 +189,7 @@ mod tests {
             Bytes::from_static(b"chunk4"),
         ];
 
-        let mut encoded = coder.encode(data).unwrap();
+        let encoded = coder.encode(data).unwrap();
         let mut to_decode: Vec<Option<Bytes>> = encoded.into_iter().map(Some).collect();
 
         // Remove too many chunks (3 out of 6, leaving only 3, need 4)

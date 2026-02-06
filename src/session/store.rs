@@ -22,7 +22,10 @@ impl SessionStore {
                 failed_chunks TEXT NOT NULL,
                 status TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
+                updated_at INTEGER NOT NULL,
+                receiver_addr TEXT,
+                file_path TEXT,
+                metrics TEXT
             )
             "#,
         )
@@ -38,6 +41,18 @@ impl SessionStore {
             .execute(&pool)
             .await?;
 
+        // Migration: Add new columns if they don't exist (for existing databases)
+        // SQLite doesn't support IF NOT EXISTS for columns, so we check first
+        let _ = sqlx::query("ALTER TABLE sessions ADD COLUMN receiver_addr TEXT")
+            .execute(&pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE sessions ADD COLUMN file_path TEXT")
+            .execute(&pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE sessions ADD COLUMN metrics TEXT")
+            .execute(&pool)
+            .await;
+
         Ok(Self { pool })
     }
 
@@ -52,12 +67,14 @@ impl SessionStore {
         let completed_json = serde_json::to_string(&state.completed_chunks)?;
         let failed_json = serde_json::to_string(&state.failed_chunks)?;
         let status_json = serde_json::to_string(&state.status)?;
+        let receiver_addr_str = state.receiver_addr.map(|a| a.to_string());
+        let metrics_json = serde_json::to_string(&state.metrics)?;
 
         sqlx::query(
             r#"
             INSERT OR REPLACE INTO sessions
-            (session_id, file_id, manifest, completed_chunks, failed_chunks, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (session_id, file_id, manifest, completed_chunks, failed_chunks, status, created_at, updated_at, receiver_addr, file_path, metrics)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&state.session_id)
@@ -68,6 +85,9 @@ impl SessionStore {
         .bind(status_json)
         .bind(state.created_at)
         .bind(chrono::Utc::now().timestamp())
+        .bind(receiver_addr_str)
+        .bind(&state.file_path)
+        .bind(metrics_json)
         .execute(&self.pool)
         .await?;
 
@@ -82,6 +102,18 @@ impl SessionStore {
             .await?;
 
         if let Some(row) = row {
+            // Parse receiver_addr from string
+            let receiver_addr_str: Option<String> = row.try_get("receiver_addr").ok().flatten();
+            let receiver_addr =
+                receiver_addr_str.and_then(|s| s.parse::<std::net::SocketAddr>().ok());
+
+            // Parse metrics, default if not present
+            let metrics: crate::session::types::TransferMetrics = row
+                .try_get::<String, _>("metrics")
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
             let state = SessionState {
                 session_id: row.try_get("session_id")?,
                 file_id: row.try_get("file_id")?,
@@ -93,6 +125,9 @@ impl SessionStore {
                 status: serde_json::from_str(&row.try_get::<String, _>("status")?)?,
                 created_at: row.try_get("created_at")?,
                 updated_at: row.try_get("updated_at")?,
+                receiver_addr,
+                file_path: row.try_get("file_path").ok().flatten(),
+                metrics,
             };
             Ok(Some(state))
         } else {
@@ -112,6 +147,33 @@ impl SessionStore {
             .ok_or_else(|| SessionError::NotFound(session_id.to_string()))?;
 
         state.mark_completed(chunk_number);
+
+        // Record bytes transferred for speed calculation
+        let chunk_size = state.manifest.chunk_size as u64;
+        state.record_bytes_transferred(chunk_size);
+
+        // Auto-complete session if all chunks are done
+        if state.is_complete() && !state.status.is_completed() {
+            state.status = SessionStatus::Completed;
+        }
+
+        self.save(&state).await
+    }
+
+    /// Mark chunk as completed with specific byte count
+    pub async fn mark_chunk_completed_with_bytes(
+        &self,
+        session_id: &str,
+        chunk_number: u32,
+        bytes_transferred: u64,
+    ) -> SessionResult<()> {
+        let mut state = self
+            .load(session_id)
+            .await?
+            .ok_or_else(|| SessionError::NotFound(session_id.to_string()))?;
+
+        state.mark_completed(chunk_number);
+        state.record_bytes_transferred(bytes_transferred);
 
         // Auto-complete session if all chunks are done
         if state.is_complete() && !state.status.is_completed() {
@@ -170,6 +232,18 @@ impl SessionStore {
 
         let mut summaries = Vec::new();
         for row in rows {
+            // Parse receiver_addr from string
+            let receiver_addr_str: Option<String> = row.try_get("receiver_addr").ok().flatten();
+            let receiver_addr =
+                receiver_addr_str.and_then(|s| s.parse::<std::net::SocketAddr>().ok());
+
+            // Parse metrics, default if not present
+            let metrics: crate::session::types::TransferMetrics = row
+                .try_get::<String, _>("metrics")
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
             let state = SessionState {
                 session_id: row.try_get("session_id")?,
                 file_id: row.try_get("file_id")?,
@@ -181,6 +255,9 @@ impl SessionStore {
                 status: serde_json::from_str(&row.try_get::<String, _>("status")?)?,
                 created_at: row.try_get("created_at")?,
                 updated_at: row.try_get("updated_at")?,
+                receiver_addr,
+                file_path: row.try_get("file_path").ok().flatten(),
+                metrics,
             };
             summaries.push(SessionSummary::from_state(&state));
         }
@@ -202,6 +279,18 @@ impl SessionStore {
 
         let mut summaries = Vec::new();
         for row in rows {
+            // Parse receiver_addr from string
+            let receiver_addr_str: Option<String> = row.try_get("receiver_addr").ok().flatten();
+            let receiver_addr =
+                receiver_addr_str.and_then(|s| s.parse::<std::net::SocketAddr>().ok());
+
+            // Parse metrics, default if not present
+            let metrics: crate::session::types::TransferMetrics = row
+                .try_get::<String, _>("metrics")
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
             let state = SessionState {
                 session_id: row.try_get("session_id")?,
                 file_id: row.try_get("file_id")?,
@@ -213,6 +302,9 @@ impl SessionStore {
                 status: serde_json::from_str(&row.try_get::<String, _>("status")?)?,
                 created_at: row.try_get("created_at")?,
                 updated_at: row.try_get("updated_at")?,
+                receiver_addr,
+                file_path: row.try_get("file_path").ok().flatten(),
+                metrics,
             };
             summaries.push(SessionSummary::from_state(&state));
         }

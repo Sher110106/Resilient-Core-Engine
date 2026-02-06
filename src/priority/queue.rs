@@ -260,6 +260,9 @@ mod tests {
                 is_parity: false,
                 priority,
                 created_at: chrono::Utc::now().timestamp(),
+                file_size: 1024 * 100,
+                file_checksum: [0u8; 32],
+                data_chunks: 80,
             },
             data: Bytes::from(vec![0u8; 1024]),
         }

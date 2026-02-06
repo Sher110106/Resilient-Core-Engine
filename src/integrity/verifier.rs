@@ -247,6 +247,9 @@ mod tests {
                 is_parity: false,
                 priority: Priority::Normal,
                 created_at: chrono::Utc::now().timestamp(),
+                file_size: data.len() as u64,
+                file_checksum: [0u8; 32],
+                data_chunks: 1,
             },
             data: Bytes::from(data.to_vec()),
         }
@@ -397,6 +400,9 @@ mod tests {
             is_parity: false,
             priority: Priority::Normal,
             created_at: chrono::Utc::now().timestamp(),
+            file_size: 256 * 1024 * 10,
+            file_checksum: [0u8; 32],
+            data_chunks: 8,
         };
 
         assert!(IntegrityVerifier::verify_metadata(&metadata).is_ok());
@@ -414,6 +420,9 @@ mod tests {
             is_parity: false,
             priority: Priority::Normal,
             created_at: chrono::Utc::now().timestamp(),
+            file_size: 256 * 1024 * 10,
+            file_checksum: [0u8; 32],
+            data_chunks: 8,
         };
 
         let result = IntegrityVerifier::verify_metadata(&metadata);

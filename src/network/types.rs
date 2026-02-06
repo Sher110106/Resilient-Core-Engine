@@ -72,6 +72,10 @@ pub struct ConnectionConfig {
     pub keep_alive_interval: Duration,
     pub max_concurrent_streams: u32,
     pub initial_mtu: u16,
+    /// SECURITY WARNING: When true, TLS certificate verification is disabled.
+    /// This should ONLY be used for testing with self-signed certificates.
+    /// In production, set this to false and provide proper certificates.
+    pub insecure_skip_verify: bool,
 }
 
 impl Default for ConnectionConfig {
@@ -82,12 +86,36 @@ impl Default for ConnectionConfig {
             keep_alive_interval: Duration::from_secs(5),
             max_concurrent_streams: 100,
             initial_mtu: 1200,
+            // Default to insecure for backward compatibility with self-signed certs
+            // TODO: Change to false when proper certificate management is implemented
+            insecure_skip_verify: true,
         }
     }
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+impl ConnectionConfig {
+    /// Create a secure configuration (certificate verification enabled)
+    /// Use this in production environments
+    pub fn secure(bind_addr: SocketAddr) -> Self {
+        Self {
+            bind_addr,
+            insecure_skip_verify: false,
+            ..Default::default()
+        }
+    }
+
+    /// Create an insecure configuration for testing with self-signed certs
+    /// WARNING: Do not use in production!
+    pub fn insecure_for_testing(bind_addr: SocketAddr) -> Self {
+        Self {
+            bind_addr,
+            insecure_skip_verify: true,
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct NetworkStats {
     pub total_bytes_sent: u64,
     pub total_bytes_received: u64,
@@ -96,4 +124,3 @@ pub struct NetworkStats {
     pub retransmissions: u64,
     pub active_connections: usize,
 }
-

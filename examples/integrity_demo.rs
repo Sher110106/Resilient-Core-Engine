@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use chunkstream_pro::chunk::{Chunk, ChunkMetadata, FileManifest, Priority};
-use chunkstream_pro::integrity::{IntegrityCheck, IntegrityVerifier};
+use chunkstream_pro::integrity::IntegrityVerifier;
 
 fn create_test_chunk(data: &[u8], sequence_number: u32, total_chunks: u32) -> Chunk {
     let checksum = IntegrityVerifier::calculate_checksum(data);
@@ -15,6 +15,9 @@ fn create_test_chunk(data: &[u8], sequence_number: u32, total_chunks: u32) -> Ch
             is_parity: false,
             priority: Priority::Normal,
             created_at: chrono::Utc::now().timestamp(),
+            file_size: data.len() as u64 * total_chunks as u64,
+            file_checksum: [0u8; 32],
+            data_chunks: total_chunks,
         },
         data: Bytes::from(data.to_vec()),
     }
@@ -164,6 +167,9 @@ async fn main() {
         is_parity: false,
         priority: Priority::High,
         created_at: chrono::Utc::now().timestamp(),
+        file_size: 256 * 1024 * 10,
+        file_checksum: [0u8; 32],
+        data_chunks: 8,
     };
 
     match IntegrityVerifier::verify_metadata(&valid_metadata) {
@@ -181,6 +187,9 @@ async fn main() {
         is_parity: false,
         priority: Priority::Normal,
         created_at: chrono::Utc::now().timestamp(),
+        file_size: 256 * 1024 * 10,
+        file_checksum: [0u8; 32],
+        data_chunks: 8,
     };
 
     match IntegrityVerifier::verify_metadata(&invalid_metadata) {

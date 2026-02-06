@@ -1,6 +1,7 @@
 use crate::chunk::Chunk;
 use crate::network::error::{NetworkError, NetworkResult};
 use crate::network::types::{ConnectionConfig, NetworkStats};
+use backoff::{backoff::Backoff, ExponentialBackoff};
 use bytes::Bytes;
 use dashmap::DashMap;
 use quinn::{Connection, Endpoint, RecvStream, ServerConfig};
@@ -13,17 +14,28 @@ pub struct QuicTransport {
     endpoint: Endpoint,
     connections: Arc<DashMap<String, Connection>>,
     stats: Arc<parking_lot::RwLock<NetworkStats>>,
+    /// Whether TLS certificate verification is skipped (INSECURE)
+    insecure_mode: bool,
 }
 
 impl QuicTransport {
     /// Create new QUIC transport with self-signed certificate
     pub async fn new(config: ConnectionConfig) -> NetworkResult<Self> {
+        if config.insecure_skip_verify {
+            tracing::warn!(
+                "SECURITY WARNING: TLS certificate verification is DISABLED. \
+                 This is insecure and should only be used for testing with self-signed certificates. \
+                 Set insecure_skip_verify=false and use proper certificates in production."
+            );
+        }
+
         let (endpoint, _server_cert) = Self::make_server_endpoint(config.bind_addr)?;
 
         Ok(Self {
             endpoint,
             connections: Arc::new(DashMap::new()),
             stats: Arc::new(parking_lot::RwLock::new(NetworkStats::default())),
+            insecure_mode: config.insecure_skip_verify,
         })
     }
 
@@ -55,16 +67,49 @@ impl QuicTransport {
         Ok((endpoint, cert_der))
     }
 
-    /// Create client endpoint (insecure, for testing)
-    fn make_client_endpoint() -> NetworkResult<Endpoint> {
+    /// Create client endpoint
+    /// If `insecure` is true, accepts any certificate (for testing with self-signed certs)
+    /// If `insecure` is false, uses system root certificates for verification
+    fn make_client_endpoint(insecure: bool) -> NetworkResult<Endpoint> {
         let mut endpoint = Endpoint::client("0.0.0.0:0".parse().unwrap())
             .map_err(|e| NetworkError::ConnectionFailed(e.to_string()))?;
 
-        // Configure insecure client (accepts any certificate)
-        let crypto = rustls::ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
-            .with_no_client_auth();
+        let crypto = if insecure {
+            // INSECURE: Skip certificate verification (for testing only)
+            rustls::ClientConfig::builder()
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
+                .with_no_client_auth()
+        } else {
+            // SECURE: Use system root certificates
+            let mut root_store = rustls::RootCertStore::empty();
+
+            // Try to load native/system certificates
+            match rustls_native_certs::load_native_certs() {
+                Ok(certs) => {
+                    for cert in certs {
+                        if let Err(e) = root_store.add(cert) {
+                            tracing::warn!("Failed to add certificate to root store: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to load native certificates: {}. Using webpki roots.",
+                        e
+                    );
+                }
+            }
+
+            // Fall back to webpki roots if native certs are empty
+            if root_store.is_empty() {
+                root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            }
+
+            rustls::ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth()
+        };
 
         let mut client_config = quinn::ClientConfig::new(Arc::new(
             quinn::crypto::rustls::QuicClientConfig::try_from(crypto)
@@ -85,7 +130,7 @@ impl QuicTransport {
 
     /// Connect to remote endpoint
     pub async fn connect(&self, remote_addr: SocketAddr) -> NetworkResult<Connection> {
-        let endpoint = Self::make_client_endpoint()?;
+        let endpoint = Self::make_client_endpoint(self.insecure_mode)?;
 
         let conn = endpoint
             .connect(remote_addr, "localhost")
@@ -206,6 +251,41 @@ impl QuicTransport {
         })
     }
 
+    /// Send chunk with automatic retry using exponential backoff (backoff crate)
+    pub async fn send_with_backoff(&self, conn: &Connection, chunk: &Chunk) -> NetworkResult<()> {
+        let mut backoff = ExponentialBackoff {
+            initial_interval: Duration::from_millis(100),
+            max_interval: Duration::from_secs(2),
+            max_elapsed_time: Some(Duration::from_secs(30)),
+            ..Default::default()
+        };
+
+        loop {
+            match self.send_chunk(conn, chunk).await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    match backoff.next_backoff() {
+                        Some(duration) => {
+                            tracing::warn!("Send failed, retrying in {:?}: {}", duration, e);
+
+                            // Update retry stats
+                            {
+                                let mut stats = self.stats.write();
+                                stats.retransmissions += 1;
+                            }
+
+                            tokio::time::sleep(duration).await;
+                        }
+                        None => {
+                            // Max elapsed time exceeded
+                            return Err(NetworkError::MaxRetriesExceeded(0));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Send chunk with automatic retry
     pub async fn send_with_retry(
         &self,
@@ -246,9 +326,7 @@ impl QuicTransport {
 
     /// Get local address
     pub fn local_addr(&self) -> NetworkResult<SocketAddr> {
-        self.endpoint
-            .local_addr()
-            .map_err(NetworkError::IoError)
+        self.endpoint.local_addr().map_err(NetworkError::IoError)
     }
 
     /// Get network statistics
@@ -340,6 +418,9 @@ mod tests {
                 is_parity: false,
                 priority: Priority::Normal,
                 created_at: chrono::Utc::now().timestamp(),
+                file_size: data.len() as u64,
+                file_checksum: [0u8; 32],
+                data_chunks: 1,
             },
             data: Bytes::from(data.to_vec()),
         }

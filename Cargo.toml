@@ -28,6 +28,8 @@ futures = "0.3"
 # Network
 quinn = "0.11"
 rustls = { version = "0.23", features = ["ring"] }
+rustls-native-certs = "0.7"
+webpki-roots = "0.26"
 rcgen = "0.13"
 socket2 = "0.5"
 
@@ -44,6 +46,19 @@ anyhow = "1.0"
 
 # Logging
 tracing = "0.1"
+
+# Retry & Backoff (Phase 3)
+backoff = { version = "0.4", features = ["tokio"] }
+
+# Rate Limiting (Phase 3)
+governor = "0.6"
+
+# Compression (Phase 2)
+lz4_flex = "0.11"
+
+# Metrics & Observability (Phase 3)
+metrics = "0.24"
+metrics-exporter-prometheus = "0.16"
 
 # API Layer
 axum = { version = "0.7", features = ["ws", "multipart"] }
