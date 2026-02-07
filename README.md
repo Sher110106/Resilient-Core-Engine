@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Project-100%25%20Complete-brightgreen?style=for-the-badge" alt="Complete">
 </p>
 
-> **A military-grade resilient file transfer system for disaster response scenarios.** Uses adaptive erasure coding over QUIC to guarantee data delivery even under **20-33% packet loss** conditions where traditional transfer methods fail.
+> **A highly resilient file transfer system designed for disaster response scenarios.** Uses adaptive erasure coding over QUIC to guarantee data delivery even under **20-33% packet loss** conditions where traditional transfer methods fail.
 
 ---
 
