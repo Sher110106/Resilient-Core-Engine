@@ -12,7 +12,10 @@ function ComparisonView({ currentMetrics }) {
       // TCP: degrades rapidly after 1-2% loss
       // Real TCP retransmits, but throughput collapses and failure rate rises sharply
       const tcpSuccess = loss <= 1 ? 100 : loss <= 3 ? 100 - (loss - 1) * 15 : Math.max(0, 70 - (loss - 3) * 8);
-      const tcpThroughput = loss <= 1 ? 100 : loss <= 5 ? 100 - loss * 12 : Math.max(0, 40 - (loss - 5) * 5);
+      // Raw throughput from retransmission overhead, then scale by success rate:
+      // if only N% of transfers succeed, effective throughput is at most N% of raw throughput
+      const tcpRawThroughput = loss <= 1 ? 100 : loss <= 5 ? 100 - loss * 12 : Math.max(0, 40 - (loss - 5) * 5);
+      const tcpThroughput = tcpRawThroughput * (tcpSuccess / 100);
 
       // RESILIENT: Reed-Solomon is all-or-nothing.
       // If loss <= max recoverable for current parity level -> 100% integrity.

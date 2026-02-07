@@ -110,15 +110,25 @@
 }
 
 .slider-scale {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  height: 1rem;
   font-size: 0.625rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
 .scale-marker {
+  position: absolute;
+  transform: translateX(-50%);
   font-weight: 600;
+}
+
+.scale-marker:first-child {
+  transform: translateX(0);
+}
+
+.scale-marker:last-child {
+  transform: translateX(-100%);
 }
 
 .scale-marker.danger {

@@ -79,11 +79,11 @@ function PacketLossSimulator({ currentMetrics }) {
 
             {/* Scale markers */}
             <div className="slider-scale">
-              <span>0%</span>
-              <span className="scale-marker">8%</span>
-              <span className="scale-marker">20%</span>
-              <span className="scale-marker danger">33%</span>
-              <span>50%</span>
+              <span className="scale-marker" style={{ left: '0%' }}>0%</span>
+              <span className="scale-marker" style={{ left: '16%' }}>8%</span>
+              <span className="scale-marker" style={{ left: '40%' }}>20%</span>
+              <span className="scale-marker danger" style={{ left: '66%' }}>33%</span>
+              <span className="scale-marker" style={{ left: '100%' }}>50%</span>
             </div>
           </div>
         </div>
