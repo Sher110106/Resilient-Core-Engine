@@ -1,48 +1,20 @@
 import React, { useState } from 'react';
+import { Upload, File, Send } from 'lucide-react';
 import './FileUpload.css';
-
-// Upload Icon
-const UploadIcon = () => (
-  <svg className="upload-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-    <polyline points="17 8 12 3 7 8"/>
-    <line x1="12" y1="3" x2="12" y2="15"/>
-  </svg>
-);
-
-// File Icon
-const FileIcon = () => (
-  <svg className="file-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-    <polyline points="14 2 14 8 20 8"/>
-    <line x1="16" y1="13" x2="8" y2="13"/>
-    <line x1="16" y1="17" x2="8" y2="17"/>
-    <polyline points="10 9 9 9 8 9"/>
-  </svg>
-);
-
-// Radio Signal Icon
-const SignalIcon = () => (
-  <svg className="signal-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
-    <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
-    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
-    <circle cx="12" cy="20" r="1"/>
-  </svg>
-);
 
 function FileUpload({ onUpload }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [priority, setPriority] = useState('Normal');
   const [receiverAddr, setReceiverAddr] = useState('127.0.0.1:5001');
   const [dragActive, setDragActive] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
+    if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true);
-    } else if (e.type === "dragleave") {
+    } else if (e.type === 'dragleave') {
       setDragActive(false);
     }
   };
@@ -51,7 +23,6 @@ function FileUpload({ onUpload }) {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       setSelectedFile(e.dataTransfer.files[0]);
     }
@@ -66,33 +37,32 @@ function FileUpload({ onUpload }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (selectedFile) {
-      await onUpload(selectedFile, priority, receiverAddr);
-      setSelectedFile(null);
+    if (selectedFile && !sending) {
+      setSending(true);
+      try {
+        await onUpload(selectedFile, priority, receiverAddr);
+        setSelectedFile(null);
+      } catch (err) {
+        // handled upstream
+      }
+      setSending(false);
     }
   };
 
-  const getPriorityClass = (p) => {
-    if (p === 'Critical') return 'priority-critical';
-    if (p === 'High') return 'priority-high';
-    return 'priority-normal';
-  };
-
-  const getPriorityLabel = (p) => {
-    if (p === 'Critical') return 'Life-Safety Data';
-    if (p === 'High') return 'Damage Assessment';
-    return 'Logistics/Supply';
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
   return (
-    <div className="file-upload-container">
-      <h2>
-        <SignalIcon />
-        Transmit Critical Data
-      </h2>
-      
-      <form onSubmit={handleSubmit} className="file-upload-form">
-        <div 
+    <div className="file-upload">
+      <div className="section-header">
+        <h3>Transfer File</h3>
+      </div>
+
+      <form onSubmit={handleSubmit} className="upload-form">
+        <div
           className={`drop-zone ${dragActive ? 'drag-active' : ''} ${selectedFile ? 'has-file' : ''}`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
@@ -103,39 +73,33 @@ function FileUpload({ onUpload }) {
             type="file"
             id="file-input"
             onChange={handleChange}
-            className="file-input"
+            className="file-input-hidden"
           />
-          <label htmlFor="file-input" className="file-label">
+          <label htmlFor="file-input" className="drop-label">
             {selectedFile ? (
-              <div className="file-info">
-                <FileIcon />
+              <div className="file-selected">
+                <File size={20} />
                 <span className="file-name">{selectedFile.name}</span>
-                <span className="file-size">
-                  {(selectedFile.size / 1024).toFixed(2)} KB
-                </span>
-                <span className={`priority-badge ${getPriorityClass(priority)}`}>
-                  {getPriorityLabel(priority)}
-                </span>
+                <span className="file-size">{formatSize(selectedFile.size)}</span>
               </div>
             ) : (
-              <div className="upload-prompt">
-                <UploadIcon />
-                <p className="upload-text">Drop mission-critical file here</p>
-                <p className="upload-hint">or click to browse</p>
+              <div className="drop-prompt">
+                <Upload size={24} />
+                <span>Drop file here or click to browse</span>
               </div>
             )}
           </label>
         </div>
 
-        <div className="upload-options">
-          <div className="priority-selector">
-            <label htmlFor="priority">Priority Level:</label>
-            <div className="priority-buttons">
+        <div className="upload-controls">
+          <div className="control-group">
+            <label className="control-label">Priority</label>
+            <div className="priority-pills">
               {['Critical', 'High', 'Normal'].map((p) => (
                 <button
                   key={p}
                   type="button"
-                  className={`priority-btn ${getPriorityClass(p)} ${priority === p ? 'active' : ''}`}
+                  className={`priority-pill ${priority === p ? 'active' : ''} ${p.toLowerCase()}`}
                   onClick={() => setPriority(p)}
                 >
                   {p}
@@ -144,26 +108,25 @@ function FileUpload({ onUpload }) {
             </div>
           </div>
 
-          <div className="receiver-address">
-            <label htmlFor="receiver-addr">Command Center Address:</label>
+          <div className="control-group">
+            <label className="control-label">Receiver Address</label>
             <input
-              id="receiver-addr"
               type="text"
               value={receiverAddr}
               onChange={(e) => setReceiverAddr(e.target.value)}
               placeholder="127.0.0.1:5001"
-              className="receiver-addr-input"
+              className="addr-input"
             />
           </div>
         </div>
 
-        <button 
-          type="submit" 
-          className="upload-button"
-          disabled={!selectedFile}
+        <button
+          type="submit"
+          className="send-button"
+          disabled={!selectedFile || sending}
         >
-          <SignalIcon />
-          Initiate Secure Transmission
+          <Send size={16} />
+          {sending ? 'Sending...' : 'Send'}
         </button>
       </form>
     </div>

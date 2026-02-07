@@ -33,6 +33,13 @@ impl RestApi {
             .route("/api/v1/transfers/:id/resume", post(resume_transfer))
             .route("/api/v1/transfers/:id/cancel", post(cancel_transfer))
             .route("/api/v1/transfers/:id/progress", get(get_progress))
+            // Metric endpoints
+            .route("/api/v1/metrics/erasure", get(get_erasure_metrics))
+            .route("/api/v1/metrics/network", get(get_network_metrics))
+            .route("/api/v1/metrics/queue", get(get_queue_metrics))
+            .route("/api/v1/metrics/summary", get(get_metrics_summary))
+            // Simulation endpoint
+            .route("/api/v1/simulate/packet-loss", post(simulate_packet_loss))
             .with_state(self.coordinator.clone())
     }
 }
@@ -263,6 +270,115 @@ async fn get_progress(
         total_bytes: progress.total_bytes,
         current_speed_bps: progress.current_speed_bps,
     }))
+}
+
+// --- Metric endpoints ---
+
+async fn get_erasure_metrics(
+    State(coordinator): State<Arc<TransferCoordinator>>,
+) -> Json<ErasureMetricsResponse> {
+    let status = coordinator.adaptive_coder().status();
+    let config = crate::chunk::AdaptiveErasureConfig::default();
+
+    let thresholds: Vec<ErasureThreshold> = config
+        .thresholds
+        .iter()
+        .map(|&(loss_rate, parity)| ErasureThreshold {
+            loss_rate,
+            parity,
+            overhead_percent: config.overhead_percent(parity),
+        })
+        .collect();
+
+    Json(ErasureMetricsResponse {
+        data_shards: status.data_shards,
+        parity_shards: status.parity_shards,
+        observed_loss_rate: status.observed_loss_rate,
+        overhead_percent: status.overhead_percent,
+        recovery_capability: status.recovery_capability,
+        thresholds,
+    })
+}
+
+async fn get_network_metrics(
+    State(_coordinator): State<Arc<TransferCoordinator>>,
+) -> Json<NetworkMetricsResponse> {
+    // Network stats from the coordinator's simulation counters
+    Json(NetworkMetricsResponse {
+        total_bytes_sent: 0,
+        total_bytes_received: 0,
+        chunks_sent: _coordinator.sim_chunks_sent(),
+        chunks_received: _coordinator
+            .sim_chunks_sent()
+            .saturating_sub(_coordinator.sim_chunks_lost()),
+        retransmissions: 0,
+        active_connections: _coordinator.list_active().len(),
+    })
+}
+
+async fn get_queue_metrics(
+    State(coordinator): State<Arc<TransferCoordinator>>,
+) -> Json<QueueMetricsResponse> {
+    let stats = coordinator.queue_stats();
+    let (used, _available, utilization) = coordinator.queue_capacity();
+
+    Json(QueueMetricsResponse {
+        critical_pending: stats.critical_pending,
+        high_pending: stats.high_pending,
+        normal_pending: stats.normal_pending,
+        total_processed: stats.total_processed,
+        total_enqueued: stats.total_enqueued,
+        avg_wait_time_ms: stats.avg_wait_time_ms,
+        max_wait_time_ms: stats.max_wait_time_ms,
+        capacity_used: used,
+        capacity_total: 1_000_000,
+        utilization_percent: utilization,
+    })
+}
+
+async fn get_metrics_summary(
+    State(coordinator): State<Arc<TransferCoordinator>>,
+) -> Json<MetricsSummaryResponse> {
+    let erasure_status = coordinator.adaptive_coder().status();
+    let queue_stats = coordinator.queue_stats();
+
+    Json(MetricsSummaryResponse {
+        active_transfers: coordinator.list_active().len(),
+        completed_transfers: coordinator.count_completed(),
+        current_loss_rate: erasure_status.observed_loss_rate,
+        recovery_capability: erasure_status.recovery_capability,
+        current_parity_shards: erasure_status.parity_shards,
+        data_shards: erasure_status.data_shards,
+        overhead_percent: erasure_status.overhead_percent,
+        total_bytes_transferred: 0,
+        total_chunks_processed: queue_stats.total_processed,
+        queue_depth: queue_stats.total_pending(),
+        uptime_seconds: coordinator.uptime_seconds(),
+    })
+}
+
+async fn simulate_packet_loss(
+    State(coordinator): State<Arc<TransferCoordinator>>,
+    Json(req): Json<SimulationRequest>,
+) -> Json<SimulationResponse> {
+    let loss_rate = req.loss_rate.clamp(0.0, 0.5);
+    let num_samples = 100;
+
+    coordinator.simulate_packet_loss(loss_rate, num_samples);
+
+    let status = coordinator.adaptive_coder().status();
+
+    Json(SimulationResponse {
+        message: format!(
+            "Simulated {}% packet loss with {} samples",
+            (loss_rate * 100.0) as u32,
+            num_samples
+        ),
+        applied_loss_rate: loss_rate,
+        resulting_parity: status.parity_shards,
+        recovery_capability: status.recovery_capability,
+        overhead_percent: status.overhead_percent,
+    })
 }
 
 #[cfg(test)]

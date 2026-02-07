@@ -144,6 +144,23 @@ impl AdaptiveErasureCoder {
         *self.observed_loss_rate.read().unwrap()
     }
 
+    /// Directly set the observed loss rate and update parity accordingly.
+    /// Used by the simulation endpoint to avoid EMA smoothing lag.
+    pub fn set_loss_rate(&self, rate: f32) {
+        let clamped = rate.clamp(0.0, 1.0);
+        {
+            let mut r = self.observed_loss_rate.write().unwrap();
+            *r = clamped;
+        }
+        let new_parity = self.config.parity_for_loss_rate(clamped);
+        self.current_parity
+            .store(new_parity as u32, Ordering::Relaxed);
+        // Reset sample counters so future record_success/record_loss
+        // start fresh from this baseline
+        self.sample_count.store(0, Ordering::Relaxed);
+        self.lost_count.store(0, Ordering::Relaxed);
+    }
+
     /// Create an ErasureCoder with current settings
     pub fn create_coder(&self) -> crate::chunk::Result<ErasureCoder> {
         ErasureCoder::new(self.config.data_shards, self.current_parity())

@@ -1,3 +1,4 @@
+use crate::chunk::{AdaptiveErasureCoder, AdaptiveErasureConfig};
 use crate::chunk::{Chunk, ChunkManager, FileManifest, Priority};
 use crate::coordinator::error::{CoordinatorError, CoordinatorResult};
 use crate::coordinator::state_machine::TransferStateMachine;
@@ -9,8 +10,9 @@ use crate::session::{SessionState, SessionStatus, SessionStore};
 use dashmap::DashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time;
 
 pub struct TransferCoordinator {
@@ -28,6 +30,17 @@ pub struct TransferCoordinator {
 
     // Session ID mapping
     file_to_session: Arc<DashMap<String, String>>,
+
+    // Adaptive erasure coder for metrics & simulation
+    adaptive_coder: Arc<AdaptiveErasureCoder>,
+
+    // Simulation counters
+    sim_chunks_sent: Arc<AtomicU64>,
+    sim_chunks_lost: Arc<AtomicU64>,
+    sim_chunks_recovered: Arc<AtomicU64>,
+
+    // Start time for uptime tracking
+    start_time: Instant,
 }
 
 impl TransferCoordinator {
@@ -38,6 +51,9 @@ impl TransferCoordinator {
         queue: PriorityQueue,
         session_store: SessionStore,
     ) -> Self {
+        let adaptive_config = AdaptiveErasureConfig::default();
+        let adaptive_coder = AdaptiveErasureCoder::new(adaptive_config);
+
         Self {
             chunk_manager: Arc::new(chunk_manager),
             verifier: Arc::new(verifier),
@@ -47,6 +63,11 @@ impl TransferCoordinator {
             active_transfers: Arc::new(DashMap::new()),
             recent_transfers: Arc::new(DashMap::new()),
             file_to_session: Arc::new(DashMap::new()),
+            adaptive_coder: Arc::new(adaptive_coder),
+            sim_chunks_sent: Arc::new(AtomicU64::new(0)),
+            sim_chunks_lost: Arc::new(AtomicU64::new(0)),
+            sim_chunks_recovered: Arc::new(AtomicU64::new(0)),
+            start_time: Instant::now(),
         }
     }
 
@@ -277,6 +298,84 @@ impl TransferCoordinator {
             .collect()
     }
 
+    /// Get queue statistics
+    pub fn queue_stats(&self) -> crate::priority::QueueStats {
+        self.queue.stats()
+    }
+
+    /// Get queue capacity info
+    pub fn queue_capacity(&self) -> (usize, usize, f64) {
+        self.queue.capacity_info()
+    }
+
+    /// Get the internal chunk manager (for erasure config access)
+    pub fn chunk_manager(&self) -> &ChunkManager {
+        &self.chunk_manager
+    }
+
+    /// Count completed (terminal) transfers
+    pub fn count_completed(&self) -> usize {
+        self.recent_transfers
+            .iter()
+            .filter(|e| e.value().current_state().is_terminal())
+            .count()
+    }
+
+    /// Get the adaptive erasure coder (for metrics/simulation)
+    pub fn adaptive_coder(&self) -> &AdaptiveErasureCoder {
+        &self.adaptive_coder
+    }
+
+    /// Get simulation counters
+    pub fn sim_chunks_sent(&self) -> u64 {
+        self.sim_chunks_sent.load(Ordering::Relaxed)
+    }
+
+    pub fn sim_chunks_lost(&self) -> u64 {
+        self.sim_chunks_lost.load(Ordering::Relaxed)
+    }
+
+    pub fn sim_chunks_recovered(&self) -> u64 {
+        self.sim_chunks_recovered.load(Ordering::Relaxed)
+    }
+
+    /// Simulate packet loss at a given rate.
+    /// Directly sets the observed loss rate (no EMA smoothing) so the
+    /// dashboard immediately reflects the slider value.
+    pub fn simulate_packet_loss(&self, loss_rate: f32, num_samples: u32) {
+        // Directly set the loss rate — no smoothing lag
+        self.adaptive_coder.set_loss_rate(loss_rate);
+
+        let losses = (num_samples as f32 * loss_rate) as u32;
+        let successes = num_samples - losses;
+
+        // Update simulation counters for the data flow visualization
+        self.sim_chunks_sent
+            .fetch_add(num_samples as u64, Ordering::Relaxed);
+        self.sim_chunks_lost
+            .fetch_add(losses as u64, Ordering::Relaxed);
+
+        // Recovered = losses that could be recovered (up to parity capacity)
+        let status = self.adaptive_coder.status();
+        let max_recoverable = status.parity_shards as u32;
+        let recovered = losses.min(max_recoverable);
+        self.sim_chunks_recovered
+            .fetch_add(recovered as u64, Ordering::Relaxed);
+
+        // Also feed samples so future incremental updates work correctly
+        for _ in 0..successes {
+            self.adaptive_coder.record_success();
+        }
+        for _ in 0..losses {
+            self.adaptive_coder.record_loss();
+        }
+    }
+
+    /// Get uptime in seconds
+    pub fn uptime_seconds(&self) -> u64 {
+        self.start_time.elapsed().as_secs()
+    }
+
     /// Transfer worker - handles chunk transfer loop
     async fn transfer_worker(
         &self,
@@ -422,6 +521,11 @@ impl Clone for TransferCoordinator {
             active_transfers: self.active_transfers.clone(),
             recent_transfers: self.recent_transfers.clone(),
             file_to_session: self.file_to_session.clone(),
+            adaptive_coder: self.adaptive_coder.clone(),
+            sim_chunks_sent: self.sim_chunks_sent.clone(),
+            sim_chunks_lost: self.sim_chunks_lost.clone(),
+            sim_chunks_recovered: self.sim_chunks_recovered.clone(),
+            start_time: self.start_time,
         }
     }
 }

@@ -1,60 +1,60 @@
 import React from 'react';
+import { Activity, CheckCircle, XCircle, Shield, Zap } from 'lucide-react';
 import './Dashboard.css';
 
-// Activity Icon
-const ActivityIcon = () => (
-  <svg className="stat-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-  </svg>
-);
+function Dashboard({ stats, currentMetrics }) {
+  const lossRate = currentMetrics ? (currentMetrics.loss_rate * 100).toFixed(1) : '0.0';
+  const recovery = currentMetrics ? currentMetrics.recovery_capability.toFixed(1) : '0.0';
 
-// Check Circle Icon
-const CheckIcon = () => (
-  <svg className="stat-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-    <polyline points="22 4 12 14.01 9 11.01"/>
-  </svg>
-);
-
-// Alert Icon
-const AlertIcon = () => (
-  <svg className="stat-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10"/>
-    <line x1="12" y1="8" x2="12" y2="12"/>
-    <line x1="12" y1="16" x2="12.01" y2="16"/>
-  </svg>
-);
-
-function Dashboard({ stats }) {
   return (
     <div className="dashboard">
-      <div className="stat-card active">
-        <div className="stat-icon-wrapper active">
-          <ActivityIcon />
+      <div className="dashboard-card">
+        <div className="dashboard-card-icon">
+          <Activity size={16} />
         </div>
-        <div className="stat-content">
-          <div className="stat-value">{stats.active}</div>
-          <div className="stat-label">Active Missions</div>
-        </div>
-      </div>
-
-      <div className="stat-card completed">
-        <div className="stat-icon-wrapper completed">
-          <CheckIcon />
-        </div>
-        <div className="stat-content">
-          <div className="stat-value">{stats.completed}</div>
-          <div className="stat-label">Intel Delivered</div>
+        <div className="dashboard-card-content">
+          <span className="dashboard-card-value">{stats.active}</span>
+          <span className="dashboard-card-label">Active Transfers</span>
         </div>
       </div>
 
-      <div className="stat-card failed">
-        <div className="stat-icon-wrapper failed">
-          <AlertIcon />
+      <div className="dashboard-card">
+        <div className="dashboard-card-icon success">
+          <CheckCircle size={16} />
         </div>
-        <div className="stat-content">
-          <div className="stat-value">{stats.failed}</div>
-          <div className="stat-label">Failed Transmissions</div>
+        <div className="dashboard-card-content">
+          <span className="dashboard-card-value">{stats.completed}</span>
+          <span className="dashboard-card-label">Completed</span>
+        </div>
+      </div>
+
+      <div className="dashboard-card">
+        <div className="dashboard-card-icon danger">
+          <XCircle size={16} />
+        </div>
+        <div className="dashboard-card-content">
+          <span className="dashboard-card-value">{stats.failed}</span>
+          <span className="dashboard-card-label">Failed</span>
+        </div>
+      </div>
+
+      <div className="dashboard-card">
+        <div className="dashboard-card-icon warning">
+          <Shield size={16} />
+        </div>
+        <div className="dashboard-card-content">
+          <span className="dashboard-card-value">{lossRate}%</span>
+          <span className="dashboard-card-label">Packet Loss</span>
+        </div>
+      </div>
+
+      <div className="dashboard-card">
+        <div className="dashboard-card-icon info">
+          <Zap size={16} />
+        </div>
+        <div className="dashboard-card-content">
+          <span className="dashboard-card-value">{recovery}%</span>
+          <span className="dashboard-card-label">Recovery</span>
         </div>
       </div>
     </div>

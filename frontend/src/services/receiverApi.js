@@ -24,4 +24,5 @@ class ReceiverApi {
   }
 }
 
-export default new ReceiverApi();
+const receiverApi = new ReceiverApi();
+export default receiverApi;

@@ -12,18 +12,27 @@ use super::types::{Chunk, ChunkMetadata, FileManifest, Priority};
 pub struct ChunkManager {
     erasure_coder: ErasureCoder,
     chunk_size: usize,
+    /// Parity ratio (parity_shards / data_shards) from the configured coder.
+    /// Used to compute adaptive shard counts for smaller files.
+    parity_ratio: f64,
 }
 
 impl ChunkManager {
     pub fn new(chunk_size: usize, data_shards: usize, parity_shards: usize) -> Result<Self> {
         let erasure_coder = ErasureCoder::new(data_shards, parity_shards)?;
+        let parity_ratio = parity_shards as f64 / data_shards as f64;
         Ok(Self {
             erasure_coder,
             chunk_size,
+            parity_ratio,
         })
     }
 
-    /// Split file into chunks with erasure coding
+    /// Split file into chunks with erasure coding.
+    ///
+    /// Adaptively sizes the erasure coding parameters based on the actual
+    /// number of data chunks. For small files this avoids sending dozens of
+    /// empty padding shards (e.g. a 2 MB file no longer inflates to 30 MB).
     pub async fn split_file(
         &self,
         file_path: &Path,
@@ -41,7 +50,7 @@ impl ChunkManager {
         file_hasher.update(&file_data);
         let file_checksum = *file_hasher.finalize().as_bytes();
 
-        // 2. Split into chunks
+        // 2. Split into raw data chunks
         let mut data_chunks_vec = Vec::new();
         let mut offset = 0;
 
@@ -52,21 +61,38 @@ impl ChunkManager {
             offset = end;
         }
 
-        let data_chunks_count = data_chunks_vec.len();
+        let actual_data_chunks = data_chunks_vec.len();
 
-        // 3. Apply erasure coding
-        let encoded_chunks = self.erasure_coder.encode(data_chunks_vec)?;
+        // 3. Choose erasure coder: use the configured one if the file fills
+        //    most of the data shards, otherwise create an adaptive one that
+        //    matches the actual chunk count to avoid wasted padding.
+        let configured_data = self.erasure_coder.data_shards();
+        let use_adaptive = actual_data_chunks < configured_data / 2;
+
+        let coder = if use_adaptive {
+            // Keep the same parity *ratio* but scale to the real chunk count.
+            // Minimum 1 parity shard so there is always some redundancy.
+            let adaptive_data = actual_data_chunks.max(1);
+            let adaptive_parity =
+                ((adaptive_data as f64 * self.parity_ratio).ceil() as usize).max(1);
+            ErasureCoder::new(adaptive_data, adaptive_parity)?
+        } else {
+            ErasureCoder::new(configured_data, self.erasure_coder.parity_shards())?
+        };
+
+        // 4. Apply erasure coding
+        let encoded_chunks = coder.encode(data_chunks_vec)?;
         let total_chunks = encoded_chunks.len();
-        let parity_chunks_count = total_chunks - data_chunks_count;
+        let data_chunks_count = coder.data_shards(); // may include padding shards
+        let parity_chunks_count = coder.parity_shards();
 
-        // 4. Create chunks with metadata
+        // 5. Create chunks with metadata
         let mut chunks = Vec::new();
         let created_at = chrono::Utc::now().timestamp();
 
         for (seq_num, chunk_data) in encoded_chunks.into_iter().enumerate() {
             let is_parity = seq_num >= data_chunks_count;
 
-            // Calculate chunk checksum
             let mut chunk_hasher = Hasher::new();
             chunk_hasher.update(&chunk_data);
             let checksum = *chunk_hasher.finalize().as_bytes();
@@ -81,7 +107,6 @@ impl ChunkManager {
                 is_parity,
                 priority,
                 created_at,
-                // File-level metadata for receiver reconstruction
                 file_size: total_size,
                 file_checksum,
                 data_chunks: data_chunks_count as u32,
@@ -93,7 +118,7 @@ impl ChunkManager {
             });
         }
 
-        // 5. Create manifest
+        // 6. Create manifest
         let manifest = FileManifest {
             file_id: file_id.clone(),
             filename: file_path
@@ -113,17 +138,26 @@ impl ChunkManager {
         Ok((manifest, chunks))
     }
 
-    /// Reconstruct file from chunks (even with missing chunks)
+    /// Reconstruct file from chunks (even with missing chunks).
+    ///
+    /// Derives the erasure coder parameters from the manifest so that files
+    /// encoded with adaptive shard counts are decoded correctly.
     pub async fn reconstruct_file(
         &self,
         manifest: &FileManifest,
         chunks: Vec<Chunk>,
         output_path: &Path,
     ) -> Result<()> {
+        // Derive coder from the manifest — the sender may have used adaptive
+        // shard counts that differ from self.erasure_coder.
+        let data_shards = manifest.data_chunks as usize;
+        let parity_shards = manifest.parity_chunks as usize;
+        let coder = ErasureCoder::new(data_shards, parity_shards)?;
+
         // 1. Validate we have enough chunks
-        if chunks.len() < self.erasure_coder.data_shards() {
+        if chunks.len() < data_shards {
             return Err(ChunkError::InsufficientChunks {
-                needed: self.erasure_coder.data_shards(),
+                needed: data_shards,
                 available: chunks.len(),
             });
         }
@@ -149,7 +183,7 @@ impl ChunkManager {
         }
 
         // 3. Apply Reed-Solomon decoding if chunks are missing
-        let decoded = self.erasure_coder.decode(chunk_map)?;
+        let decoded = coder.decode(chunk_map)?;
 
         // 4. Assemble chunks in order and write to file
         let mut output_file = File::create(output_path).await?;
@@ -198,6 +232,16 @@ impl ChunkManager {
     pub fn chunk_size(&self) -> usize {
         self.chunk_size
     }
+
+    /// Get the erasure coder's data shard count
+    pub fn data_shards(&self) -> usize {
+        self.erasure_coder.data_shards()
+    }
+
+    /// Get the erasure coder's parity shard count
+    pub fn parity_shards(&self) -> usize {
+        self.erasure_coder.parity_shards()
+    }
 }
 
 #[cfg(test)]
@@ -243,8 +287,9 @@ mod tests {
 
         assert_eq!(chunks.len(), manifest.total_chunks as usize);
         assert_eq!(manifest.data_chunks, 4); // 1MB / 256KB = 4 chunks
-                                             // With 10 data + 3 parity config, we pad to 10 data shards + 3 parity = 13 total
-        assert_eq!(manifest.total_chunks, 13);
+                                             // With adaptive sizing: 4 data + ceil(4 * 0.3) = 4 data + 2 parity = 6 total
+                                             // (no longer padded to 10 data shards since 4 < 10/2)
+        assert_eq!(manifest.total_chunks, 6);
 
         // Reconstruct
         let output_path = temp_dir.path().join("reconstructed.bin");

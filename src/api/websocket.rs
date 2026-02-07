@@ -46,6 +46,34 @@ async fn handle_websocket(mut socket: WebSocket, coordinator: Arc<TransferCoordi
                         }
                     }
                 }
+
+                // Send metrics snapshot
+                let erasure_status = coordinator.adaptive_coder().status();
+                let queue_stats = coordinator.queue_stats();
+
+                let snapshot = WebSocketMessage::MetricsSnapshot(MetricsSnapshotData {
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                    loss_rate: erasure_status.observed_loss_rate,
+                    parity_shards: erasure_status.parity_shards,
+                    data_shards: erasure_status.data_shards,
+                    recovery_capability: erasure_status.recovery_capability,
+                    overhead_percent: erasure_status.overhead_percent,
+                    throughput_bps: 0,
+                    active_transfers: coordinator.list_active().len(),
+                    queue_depth: queue_stats.total_pending(),
+                    chunks_sent: coordinator.sim_chunks_sent(),
+                    chunks_lost: coordinator.sim_chunks_lost(),
+                    chunks_recovered: coordinator.sim_chunks_recovered(),
+                });
+
+                if let Ok(json) = serde_json::to_string(&snapshot) {
+                    if socket.send(Message::Text(json)).await.is_err() {
+                        return;
+                    }
+                }
             }
             msg = socket.recv() => {
                 match msg {
