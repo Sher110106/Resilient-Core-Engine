@@ -8,11 +8,19 @@ function MetricsPanel({ metricsHistory, currentMetrics }) {
     loss: (m.loss_rate * 100),
     recovery: m.recovery_capability,
     parity: m.parity_shards,
+    rtt: m.quic_rtt_ms || 0,
   }));
 
   const parity = currentMetrics ? currentMetrics.parity_shards : 5;
   const dataShards = currentMetrics ? currentMetrics.data_shards : 50;
   const overhead = currentMetrics ? currentMetrics.overhead_percent : 0;
+
+  // Real QUIC stats
+  const quicRtt = currentMetrics ? (currentMetrics.quic_rtt_ms || 0) : 0;
+  const quicLossRate = currentMetrics ? (currentMetrics.quic_loss_rate || 0) : 0;
+  const quicSent = currentMetrics ? (currentMetrics.quic_sent_packets || 0) : 0;
+  const quicLost = currentMetrics ? (currentMetrics.quic_lost_packets || 0) : 0;
+  const hasQuicData = quicSent > 0;
 
   // Gauge calculation for loss rate
   const lossRate = currentMetrics ? currentMetrics.loss_rate * 100 : 0;
@@ -83,6 +91,35 @@ function MetricsPanel({ metricsHistory, currentMetrics }) {
           </div>
         </div>
       </div>
+
+      {/* Real QUIC Network Stats */}
+      {hasQuicData && (
+        <div className="quic-stats-section">
+          <span className="chart-title">Real QUIC Network Stats</span>
+          <div className="quic-stats-grid">
+            <div className="quic-stat">
+              <span className="quic-stat-value mono">{quicRtt.toFixed(1)}ms</span>
+              <span className="quic-stat-label">RTT</span>
+            </div>
+            <div className="quic-stat">
+              <span className={`quic-stat-value mono ${quicLossRate > 0.05 ? 'danger' : ''}`}>
+                {(quicLossRate * 100).toFixed(2)}%
+              </span>
+              <span className="quic-stat-label">Packet Loss</span>
+            </div>
+            <div className="quic-stat">
+              <span className="quic-stat-value mono">{quicSent}</span>
+              <span className="quic-stat-label">Packets Sent</span>
+            </div>
+            <div className="quic-stat">
+              <span className={`quic-stat-value mono ${quicLost > 0 ? 'warning-text' : ''}`}>
+                {quicLost}
+              </span>
+              <span className="quic-stat-label">Packets Lost</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loss Rate / Recovery Timeline */}
       {lossData.length > 2 && (

@@ -1,6 +1,6 @@
 use crate::chunk::Chunk;
 use crate::network::error::{NetworkError, NetworkResult};
-use crate::network::types::{ConnectionConfig, NetworkStats};
+use crate::network::types::{ConnectionConfig, NetworkStats, QuicPathStats};
 use backoff::{backoff::Backoff, ExponentialBackoff};
 use bytes::Bytes;
 use dashmap::DashMap;
@@ -332,6 +332,27 @@ impl QuicTransport {
     /// Get network statistics
     pub fn stats(&self) -> NetworkStats {
         self.stats.read().clone()
+    }
+
+    /// Extract real QUIC path stats from a live connection
+    pub fn connection_stats(conn: &Connection) -> QuicPathStats {
+        let stats = conn.stats();
+        let path = stats.path;
+        let loss_rate = if path.sent_packets > 0 {
+            path.lost_packets as f64 / path.sent_packets as f64
+        } else {
+            0.0
+        };
+        QuicPathStats {
+            rtt_ms: path.rtt.as_secs_f64() * 1000.0,
+            sent_packets: path.sent_packets,
+            lost_packets: path.lost_packets,
+            lost_bytes: path.lost_bytes,
+            cwnd: path.cwnd,
+            congestion_events: path.congestion_events,
+            current_mtu: path.current_mtu,
+            loss_rate,
+        }
     }
 
     /// Close all connections

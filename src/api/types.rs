@@ -82,6 +82,14 @@ pub struct NetworkMetricsResponse {
     pub chunks_received: u64,
     pub retransmissions: u64,
     pub active_connections: usize,
+    // Real QUIC path stats (from actual transfers)
+    pub quic_rtt_ms: f64,
+    pub quic_sent_packets: u64,
+    pub quic_lost_packets: u64,
+    pub quic_loss_rate: f64,
+    pub quic_cwnd: u64,
+    pub quic_congestion_events: u64,
+    pub quic_mtu: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,6 +184,11 @@ pub struct MetricsSnapshotData {
     pub chunks_sent: u64,
     pub chunks_lost: u64,
     pub chunks_recovered: u64,
+    // Real QUIC stats
+    pub quic_rtt_ms: f64,
+    pub quic_loss_rate: f64,
+    pub quic_sent_packets: u64,
+    pub quic_lost_packets: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

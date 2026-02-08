@@ -4,7 +4,7 @@ use crate::coordinator::error::{CoordinatorError, CoordinatorResult};
 use crate::coordinator::state_machine::TransferStateMachine;
 use crate::coordinator::types::{TransferEvent, TransferProgress, TransferState};
 use crate::integrity::IntegrityVerifier;
-use crate::network::QuicTransport;
+use crate::network::{QuicPathStats, QuicTransport};
 use crate::priority::PriorityQueue;
 use crate::session::{SessionState, SessionStatus, SessionStore};
 use dashmap::DashMap;
@@ -80,6 +80,9 @@ pub struct TransferCoordinator {
     sim_chunks_lost: Arc<AtomicU64>,
     sim_chunks_recovered: Arc<AtomicU64>,
 
+    // Real QUIC path stats from the most recent transfer
+    last_quic_stats: Arc<parking_lot::RwLock<QuicPathStats>>,
+
     // Start time for uptime tracking
     start_time: Instant,
 }
@@ -108,6 +111,7 @@ impl TransferCoordinator {
             sim_chunks_sent: Arc::new(AtomicU64::new(0)),
             sim_chunks_lost: Arc::new(AtomicU64::new(0)),
             sim_chunks_recovered: Arc::new(AtomicU64::new(0)),
+            last_quic_stats: Arc::new(parking_lot::RwLock::new(QuicPathStats::default())),
             start_time: Instant::now(),
         }
     }
@@ -387,6 +391,16 @@ impl TransferCoordinator {
 
     pub fn sim_chunks_recovered(&self) -> u64 {
         self.sim_chunks_recovered.load(Ordering::Relaxed)
+    }
+
+    /// Get the most recent real QUIC path stats (from an actual transfer)
+    pub fn last_quic_stats(&self) -> QuicPathStats {
+        self.last_quic_stats.read().clone()
+    }
+
+    /// Get the transport layer (for reading network stats)
+    pub fn transport(&self) -> &QuicTransport {
+        &self.transport
     }
 
     /// Simulate packet loss at a given rate.
@@ -722,6 +736,9 @@ impl TransferCoordinator {
                                 .await?;
                             continue;
                         }
+                        // Update real QUIC stats after each chunk for live dashboard
+                        let quic_stats = QuicTransport::connection_stats(conn);
+                        *self.last_quic_stats.write() = quic_stats;
                     } else {
                         // No receiver address - simulate for local testing
                         time::sleep(Duration::from_millis(10)).await;
@@ -752,6 +769,12 @@ impl TransferCoordinator {
                 }
                 Err(e) => return Err(e.into()),
             }
+        }
+
+        // Capture real QUIC stats from the connection after transfer
+        if let Some(ref conn) = connection {
+            let quic_stats = QuicTransport::connection_stats(conn);
+            *self.last_quic_stats.write() = quic_stats;
         }
 
         // Check if completed
@@ -788,6 +811,7 @@ impl Clone for TransferCoordinator {
             sim_chunks_sent: self.sim_chunks_sent.clone(),
             sim_chunks_lost: self.sim_chunks_lost.clone(),
             sim_chunks_recovered: self.sim_chunks_recovered.clone(),
+            last_quic_stats: self.last_quic_stats.clone(),
             start_time: self.start_time,
         }
     }

@@ -28,12 +28,7 @@ function App() {
   const [uploadedFileName, setUploadedFileName] = useState(null);
 
   // Receiver state
-  // In production (behind nginx), receiver API is at /receiver on the same host.
-  // In dev, it's at localhost:8080.
-  const defaultReceiverUrl = process.env.NODE_ENV === 'production'
-    ? `${window.location.origin}/receiver`
-    : 'http://localhost:8080';
-  const [receiverUrl, setReceiverUrl] = useState(defaultReceiverUrl);
+  const [receiverUrl, setReceiverUrl] = useState('http://localhost:8080');
   const [receiverStatus, setReceiverStatus] = useState(null);
   const [receivedFiles, setReceivedFiles] = useState([]);
 
@@ -61,12 +56,7 @@ function App() {
 
   const setupWebSocket = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // In production (behind nginx), WebSocket goes through the same host/port.
-    // In dev, falls back to localhost:3000.
-    const wsHost = process.env.NODE_ENV === 'production'
-      ? window.location.host
-      : `${window.location.hostname}:3000`;
-    const wsUrl = `${protocol}//${wsHost}/ws`;
+    const wsUrl = `${protocol}//${window.location.hostname}:3000/ws`;
 
     try {
       const ws = new WebSocket(wsUrl);

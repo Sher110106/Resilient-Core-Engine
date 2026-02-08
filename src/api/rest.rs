@@ -317,18 +317,25 @@ async fn get_erasure_metrics(
 }
 
 async fn get_network_metrics(
-    State(_coordinator): State<Arc<TransferCoordinator>>,
+    State(coordinator): State<Arc<TransferCoordinator>>,
 ) -> Json<NetworkMetricsResponse> {
-    // Network stats from the coordinator's simulation counters
+    let transport_stats = coordinator.transport().stats();
+    let quic = coordinator.last_quic_stats();
+
     Json(NetworkMetricsResponse {
-        total_bytes_sent: 0,
-        total_bytes_received: 0,
-        chunks_sent: _coordinator.sim_chunks_sent(),
-        chunks_received: _coordinator
-            .sim_chunks_sent()
-            .saturating_sub(_coordinator.sim_chunks_lost()),
-        retransmissions: 0,
-        active_connections: _coordinator.list_active().len(),
+        total_bytes_sent: transport_stats.total_bytes_sent,
+        total_bytes_received: transport_stats.total_bytes_received,
+        chunks_sent: transport_stats.chunks_sent,
+        chunks_received: transport_stats.chunks_received,
+        retransmissions: transport_stats.retransmissions,
+        active_connections: coordinator.list_active().len(),
+        quic_rtt_ms: quic.rtt_ms,
+        quic_sent_packets: quic.sent_packets,
+        quic_lost_packets: quic.lost_packets,
+        quic_loss_rate: quic.loss_rate,
+        quic_cwnd: quic.cwnd,
+        quic_congestion_events: quic.congestion_events,
+        quic_mtu: quic.current_mtu,
     })
 }
 

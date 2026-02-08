@@ -9,6 +9,6 @@ pub use multipath::MultiPathManager;
 pub use quic_transport::QuicTransport;
 pub use rate_limiter::TransferRateLimiter;
 pub use types::{
-    ConnectionConfig, NetworkPath, NetworkStats, PathMetrics, PathStatus, SessionStatus,
-    TransferDirection, TransferSession,
+    ConnectionConfig, NetworkPath, NetworkStats, PathMetrics, PathStatus, QuicPathStats,
+    SessionStatus, TransferDirection, TransferSession,
 };

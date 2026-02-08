@@ -1,9 +1,6 @@
 import axios from 'axios';
 
-// In production (behind nginx), REACT_APP_API_URL is set to "" so we use
-// relative URLs. In dev, it's unset so we fall back to localhost:3000.
-const envUrl = process.env.REACT_APP_API_URL;
-const API_BASE_URL = envUrl != null ? envUrl : 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 const api = {
   async healthCheck() {

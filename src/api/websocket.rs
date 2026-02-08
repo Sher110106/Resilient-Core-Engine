@@ -50,6 +50,8 @@ async fn handle_websocket(mut socket: WebSocket, coordinator: Arc<TransferCoordi
                 // Send metrics snapshot
                 let erasure_status = coordinator.adaptive_coder().status();
                 let queue_stats = coordinator.queue_stats();
+                let quic = coordinator.last_quic_stats();
+                let transport_stats = coordinator.transport().stats();
 
                 let snapshot = WebSocketMessage::MetricsSnapshot(MetricsSnapshotData {
                     timestamp: std::time::SystemTime::now()
@@ -64,9 +66,13 @@ async fn handle_websocket(mut socket: WebSocket, coordinator: Arc<TransferCoordi
                     throughput_bps: 0,
                     active_transfers: coordinator.list_active().len(),
                     queue_depth: queue_stats.total_pending(),
-                    chunks_sent: coordinator.sim_chunks_sent(),
-                    chunks_lost: coordinator.sim_chunks_lost(),
+                    chunks_sent: transport_stats.chunks_sent,
+                    chunks_lost: quic.lost_packets,
                     chunks_recovered: coordinator.sim_chunks_recovered(),
+                    quic_rtt_ms: quic.rtt_ms,
+                    quic_loss_rate: quic.loss_rate,
+                    quic_sent_packets: quic.sent_packets,
+                    quic_lost_packets: quic.lost_packets,
                 });
 
                 if let Ok(json) = serde_json::to_string(&snapshot) {

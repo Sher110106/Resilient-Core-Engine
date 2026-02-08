@@ -124,3 +124,24 @@ pub struct NetworkStats {
     pub retransmissions: u64,
     pub active_connections: usize,
 }
+
+/// Real QUIC connection stats from quinn, captured after transfers
+#[derive(Debug, Clone, Default)]
+pub struct QuicPathStats {
+    /// Round-trip time in milliseconds
+    pub rtt_ms: f64,
+    /// Packets sent at the QUIC level
+    pub sent_packets: u64,
+    /// Packets lost at the QUIC level
+    pub lost_packets: u64,
+    /// Bytes lost
+    pub lost_bytes: u64,
+    /// Congestion window (bytes)
+    pub cwnd: u64,
+    /// Congestion events
+    pub congestion_events: u64,
+    /// Current MTU
+    pub current_mtu: u16,
+    /// Packet loss rate (lost / sent)
+    pub loss_rate: f64,
+}
