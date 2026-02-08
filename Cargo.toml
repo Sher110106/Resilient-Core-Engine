@@ -56,6 +56,9 @@ governor = "0.6"
 # Compression (Phase 2)
 lz4_flex = "0.11"
 
+# Random (for simulation)
+rand = "0.8"
+
 # Metrics & Observability (Phase 3)
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"

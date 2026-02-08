@@ -63,21 +63,26 @@ impl ChunkManager {
 
         let actual_data_chunks = data_chunks_vec.len();
 
-        // 3. Choose erasure coder: use the configured one if the file fills
-        //    most of the data shards, otherwise create an adaptive one that
-        //    matches the actual chunk count to avoid wasted padding.
+        // 3. Choose erasure coder based on actual chunk count:
+        //    - Small files (< half configured): scale DOWN to avoid wasted padding
+        //    - Normal files (fits within configured): use configured shards
+        //    - Large files (> configured): scale UP to match actual chunk count
         let configured_data = self.erasure_coder.data_shards();
-        let use_adaptive = actual_data_chunks < configured_data / 2;
 
-        let coder = if use_adaptive {
-            // Keep the same parity *ratio* but scale to the real chunk count.
-            // Minimum 1 parity shard so there is always some redundancy.
+        let coder = if actual_data_chunks < configured_data / 2 {
+            // Scale down: keep the same parity ratio but match actual chunk count
             let adaptive_data = actual_data_chunks.max(1);
             let adaptive_parity =
                 ((adaptive_data as f64 * self.parity_ratio).ceil() as usize).max(1);
             ErasureCoder::new(adaptive_data, adaptive_parity)?
-        } else {
+        } else if actual_data_chunks <= configured_data {
+            // Normal: file fits within configured shard count
             ErasureCoder::new(configured_data, self.erasure_coder.parity_shards())?
+        } else {
+            // Scale up: file exceeds configured shard count, scale parity proportionally
+            let adaptive_parity =
+                ((actual_data_chunks as f64 * self.parity_ratio).ceil() as usize).max(1);
+            ErasureCoder::new(actual_data_chunks, adaptive_parity)?
         };
 
         // 4. Apply erasure coding
@@ -241,6 +246,126 @@ impl ChunkManager {
     /// Get the erasure coder's parity shard count
     pub fn parity_shards(&self) -> usize {
         self.erasure_coder.parity_shards()
+    }
+
+    /// Compute a chunk size for simulation that targets ~30 data chunks
+    /// regardless of file size. Smaller files get smaller chunks so the
+    /// simulation produces enough data points to be statistically meaningful.
+    pub fn simulation_chunk_size(file_size: u64) -> usize {
+        const TARGET_DATA_CHUNKS: u64 = 30;
+        const MIN_CHUNK: usize = 4 * 1024; // 4 KB
+        const MAX_CHUNK: usize = 1024 * 1024; // 1 MB
+
+        if file_size == 0 {
+            return MIN_CHUNK;
+        }
+        let ideal = (file_size / TARGET_DATA_CHUNKS) as usize;
+        ideal.clamp(MIN_CHUNK, MAX_CHUNK)
+    }
+
+    /// Split a file using a custom chunk size (for simulation).
+    /// Same logic as `split_file` but with the caller-provided chunk size
+    /// instead of `self.chunk_size`. If `parity_override` is provided, use
+    /// that many parity shards instead of the default ratio.
+    pub async fn split_file_with_chunk_size(
+        &self,
+        file_path: &Path,
+        file_id: String,
+        priority: Priority,
+        chunk_size: usize,
+        parity_override: Option<usize>,
+    ) -> Result<(FileManifest, Vec<Chunk>)> {
+        // 1. Read file and calculate file-level checksum
+        let mut file = File::open(file_path).await?;
+        let metadata = file.metadata().await?;
+        let total_size = metadata.len();
+
+        let mut file_hasher = Hasher::new();
+        let mut file_data = Vec::new();
+        file.read_to_end(&mut file_data).await?;
+        file_hasher.update(&file_data);
+        let file_checksum = *file_hasher.finalize().as_bytes();
+
+        // 2. Split into raw data chunks using the provided chunk size
+        let mut data_chunks_vec = Vec::new();
+        let mut offset = 0;
+
+        while offset < file_data.len() {
+            let end = std::cmp::min(offset + chunk_size, file_data.len());
+            let chunk_data = Bytes::from(file_data[offset..end].to_vec());
+            data_chunks_vec.push(chunk_data);
+            offset = end;
+        }
+
+        let actual_data_chunks = data_chunks_vec.len();
+
+        // 3. Choose erasure coder based on actual chunk count.
+        //    Always use the actual data chunk count. If a parity override is
+        //    given (e.g. from the adaptive coder), use that; otherwise fall
+        //    back to the configured parity ratio.
+        let adaptive_data = actual_data_chunks.max(1);
+        let adaptive_parity = match parity_override {
+            Some(p) => p.max(1),
+            None => ((adaptive_data as f64 * self.parity_ratio).ceil() as usize).max(1),
+        };
+        let coder = ErasureCoder::new(adaptive_data, adaptive_parity)?;
+
+        // 4. Apply erasure coding
+        let encoded_chunks = coder.encode(data_chunks_vec)?;
+        let total_chunks = encoded_chunks.len();
+        let data_chunks_count = coder.data_shards();
+        let parity_chunks_count = coder.parity_shards();
+
+        // 5. Create chunks with metadata
+        let mut chunks = Vec::new();
+        let created_at = chrono::Utc::now().timestamp();
+
+        for (seq_num, chunk_data) in encoded_chunks.into_iter().enumerate() {
+            let is_parity = seq_num >= data_chunks_count;
+
+            let mut chunk_hasher = Hasher::new();
+            chunk_hasher.update(&chunk_data);
+            let checksum = *chunk_hasher.finalize().as_bytes();
+
+            let metadata = ChunkMetadata {
+                chunk_id: uuid::Uuid::new_v4().as_u128() as u64,
+                file_id: file_id.clone(),
+                sequence_number: seq_num as u32,
+                total_chunks: total_chunks as u32,
+                data_size: chunk_data.len(),
+                checksum,
+                is_parity,
+                priority,
+                created_at,
+                file_size: total_size,
+                file_checksum,
+                data_chunks: data_chunks_count as u32,
+            };
+
+            chunks.push(Chunk {
+                metadata,
+                data: chunk_data,
+            });
+        }
+
+        // 6. Create manifest
+        let manifest = FileManifest {
+            file_id: file_id.clone(),
+            filename: file_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+            total_size,
+            chunk_size,
+            total_chunks: total_chunks as u32,
+            data_chunks: data_chunks_count as u32,
+            parity_chunks: parity_chunks_count as u32,
+            priority,
+            checksum: file_checksum,
+        };
+
+        Ok((manifest, chunks))
     }
 }
 

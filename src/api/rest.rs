@@ -38,8 +38,11 @@ impl RestApi {
             .route("/api/v1/metrics/network", get(get_network_metrics))
             .route("/api/v1/metrics/queue", get(get_queue_metrics))
             .route("/api/v1/metrics/summary", get(get_metrics_summary))
-            // Simulation endpoint
+            // Simulation endpoints
             .route("/api/v1/simulate/packet-loss", post(simulate_packet_loss))
+            .route("/api/v1/simulate/comparison", post(simulate_comparison))
+            // Uploads listing
+            .route("/api/v1/uploads", get(list_uploads))
             .with_state(self.coordinator.clone())
     }
 }
@@ -114,11 +117,18 @@ async fn upload_and_transfer(
         }
     }
 
-    let file_path =
+    let file_name = file_path
+        .as_ref()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string());
+
+    let file_path_str = file_path.as_ref().map(|p| p.to_string_lossy().to_string());
+
+    let file_path_val =
         file_path.ok_or_else(|| ApiError::InvalidRequest("No file uploaded".to_string()))?;
 
     let session_id = coordinator
-        .send_file(file_path, priority, receiver_addr)
+        .send_file(file_path_val.clone(), priority, receiver_addr)
         .await
         .map_err(ApiError::CoordinatorError)?;
 
@@ -127,6 +137,8 @@ async fn upload_and_transfer(
         Json(StartTransferResponse {
             session_id: session_id.clone(),
             message: format!("File uploaded and transfer started with session ID: {session_id}"),
+            file_path: file_path_str,
+            file_name,
         }),
     ))
 }
@@ -165,6 +177,10 @@ async fn start_transfer(
         Json(StartTransferResponse {
             session_id: session_id.clone(),
             message: format!("Transfer started with session ID: {session_id}"),
+            file_path: Some(req.file_path.clone()),
+            file_name: std::path::Path::new(&req.file_path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string()),
         }),
     ))
 }
@@ -360,25 +376,168 @@ async fn get_metrics_summary(
 async fn simulate_packet_loss(
     State(coordinator): State<Arc<TransferCoordinator>>,
     Json(req): Json<SimulationRequest>,
-) -> Json<SimulationResponse> {
+) -> ApiResult<Json<SimulationResponse>> {
     let loss_rate = req.loss_rate.clamp(0.0, 0.5);
-    let num_samples = 100;
 
-    coordinator.simulate_packet_loss(loss_rate, num_samples);
+    // If a file path is provided, run a real file-based simulation
+    if let Some(ref file_path_str) = req.file_path {
+        let file_path = std::path::PathBuf::from(file_path_str);
+        if !file_path.exists() {
+            return Err(ApiError::InvalidRequest(format!(
+                "File not found: {}",
+                file_path_str
+            )));
+        }
 
-    let status = coordinator.adaptive_coder().status();
+        let result = coordinator
+            .simulate_file_transfer(file_path, loss_rate)
+            .await
+            .map_err(ApiError::CoordinatorError)?;
 
-    Json(SimulationResponse {
-        message: format!(
-            "Simulated {}% packet loss with {} samples",
-            (loss_rate * 100.0) as u32,
-            num_samples
-        ),
-        applied_loss_rate: loss_rate,
-        resulting_parity: status.parity_shards,
-        recovery_capability: status.recovery_capability,
-        overhead_percent: status.overhead_percent,
-    })
+        let status = coordinator.adaptive_coder().status();
+
+        Ok(Json(SimulationResponse {
+            message: format!(
+                "Simulated {}% packet loss on '{}' over {} trials: {}/{} succeeded ({:.0}% recovery rate)",
+                (loss_rate * 100.0) as u32,
+                result.file_name,
+                result.num_trials,
+                result.successful_trials,
+                result.num_trials,
+                result.success_rate,
+            ),
+            applied_loss_rate: loss_rate,
+            resulting_parity: status.parity_shards,
+            recovery_capability: status.recovery_capability,
+            overhead_percent: status.overhead_percent,
+            file_name: Some(result.file_name),
+            total_chunks: Some(result.total_chunks),
+            data_chunks: Some(result.data_chunks),
+            parity_chunks: Some(result.parity_chunks),
+            num_trials: Some(result.num_trials),
+            successful_trials: Some(result.successful_trials),
+            success_rate: Some(result.success_rate),
+            avg_chunks_lost: Some(result.avg_chunks_lost),
+            avg_chunks_recovered: Some(result.avg_chunks_recovered),
+            min_chunks_lost: Some(result.min_chunks_lost),
+            max_chunks_lost: Some(result.max_chunks_lost),
+            file_size_bytes: Some(result.file_size_bytes),
+        }))
+    } else {
+        // Fallback: abstract simulation without a file (original behavior)
+        let num_samples = 100;
+        coordinator.simulate_packet_loss(loss_rate, num_samples);
+
+        let status = coordinator.adaptive_coder().status();
+
+        Ok(Json(SimulationResponse {
+            message: format!(
+                "Simulated {}% packet loss with {} samples",
+                (loss_rate * 100.0) as u32,
+                num_samples
+            ),
+            applied_loss_rate: loss_rate,
+            resulting_parity: status.parity_shards,
+            recovery_capability: status.recovery_capability,
+            overhead_percent: status.overhead_percent,
+            file_name: None,
+            total_chunks: None,
+            data_chunks: None,
+            parity_chunks: None,
+            num_trials: None,
+            successful_trials: None,
+            success_rate: None,
+            avg_chunks_lost: None,
+            avg_chunks_recovered: None,
+            min_chunks_lost: None,
+            max_chunks_lost: None,
+            file_size_bytes: None,
+        }))
+    }
+}
+
+async fn simulate_comparison(
+    State(coordinator): State<Arc<TransferCoordinator>>,
+    Json(req): Json<ComparisonRequest>,
+) -> ApiResult<Json<ComparisonResponse>> {
+    let file_path = std::path::PathBuf::from(&req.file_path);
+    if !file_path.exists() {
+        return Err(ApiError::InvalidRequest(format!(
+            "File not found: {}",
+            req.file_path
+        )));
+    }
+
+    let trials = req.trials_per_point.unwrap_or(20);
+
+    let result = coordinator
+        .simulate_comparison(file_path, trials)
+        .await
+        .map_err(ApiError::CoordinatorError)?;
+
+    let points: Vec<ComparisonPoint> = result
+        .points
+        .into_iter()
+        .map(|p| ComparisonPoint {
+            loss_percent: p.loss_percent,
+            tcp_success_rate: p.tcp_success_rate,
+            resilient_success_rate: p.resilient_success_rate,
+            tcp_avg_chunks_lost: p.tcp_avg_chunks_lost,
+            resilient_avg_chunks_lost: p.resilient_avg_chunks_lost,
+            resilient_avg_recovered: p.resilient_avg_recovered,
+        })
+        .collect();
+
+    Ok(Json(ComparisonResponse {
+        file_name: result.file_name,
+        file_size_bytes: result.file_size_bytes,
+        total_chunks: result.total_chunks,
+        data_chunks: result.data_chunks,
+        parity_chunks: result.parity_chunks,
+        trials_per_point: result.trials_per_point,
+        points,
+    }))
+}
+
+async fn list_uploads() -> ApiResult<Json<ListUploadsResponse>> {
+    let upload_dir = std::path::PathBuf::from("./uploads");
+
+    if !upload_dir.exists() {
+        return Ok(Json(ListUploadsResponse { files: vec![] }));
+    }
+
+    let mut files = Vec::new();
+    let mut entries = tokio::fs::read_dir(&upload_dir)
+        .await
+        .map_err(|e| ApiError::InternalError(format!("Failed to read uploads directory: {e}")))?;
+
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| ApiError::InternalError(format!("Failed to read directory entry: {e}")))?
+    {
+        let metadata = entry.metadata().await.ok();
+        if let Some(meta) = &metadata {
+            if !meta.is_file() {
+                continue;
+            }
+        }
+
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        let file_path = entry.path().to_string_lossy().to_string();
+        let file_size = metadata.map(|m| m.len()).unwrap_or(0);
+
+        files.push(UploadedFileInfo {
+            file_name,
+            file_path,
+            file_size,
+        });
+    }
+
+    // Sort by name for consistency
+    files.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+
+    Ok(Json(ListUploadsResponse { files }))
 }
 
 #[cfg(test)]

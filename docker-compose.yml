@@ -1,0 +1,46 @@
+services:
+  # ── Rust Backend (Sender API + WebSocket) ──────────────────────────
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["chunkstream-server"]
+    restart: unless-stopped
+    networks:
+      - internal
+    # No ports exposed externally; nginx proxies to this service
+
+  # ── Rust Receiver (QUIC listener + REST API) ───────────────────────
+  receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["chunkstream-receiver", "0.0.0.0:5001", "/app/received"]
+    restart: unless-stopped
+    volumes:
+      - received_files:/app/received
+    networks:
+      - internal
+    # No ports exposed externally; nginx proxies the REST API,
+    # and QUIC transfers happen over the internal Docker network
+
+  # ── React Frontend (nginx reverse proxy + static files) ────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    depends_on:
+      - server
+      - receiver
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  received_files:

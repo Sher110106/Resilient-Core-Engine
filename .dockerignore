@@ -1,0 +1,16 @@
+# Rust build artifacts
+target/
+# Frontend dependencies (built inside Docker)
+frontend/node_modules/
+frontend/build/
+# Git
+.git/
+.gitignore
+# Docker files (don't need to copy themselves)
+docker-compose.yml
+deploy.sh
+# Misc
+MD_files/
+.firecrawl/
+*.md
+.DS_Store

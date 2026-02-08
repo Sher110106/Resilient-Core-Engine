@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+// In production (behind nginx), REACT_APP_API_URL is set to "" so we use
+// relative URLs. In dev, it's unset so we fall back to localhost:3000.
+const envUrl = process.env.REACT_APP_API_URL;
+const API_BASE_URL = envUrl != null ? envUrl : 'http://localhost:3000';
 
 const api = {
   async healthCheck() {
@@ -79,10 +82,29 @@ const api = {
   },
 
   // Simulation
-  async simulatePacketLoss(lossRate, durationSeconds = null) {
-    const response = await axios.post(`${API_BASE_URL}/api/v1/simulate/packet-loss`, {
+  async simulatePacketLoss(lossRate, filePath = null, durationSeconds = null) {
+    const payload = {
       loss_rate: lossRate,
       duration_seconds: durationSeconds
+    };
+    if (filePath) {
+      payload.file_path = filePath;
+    }
+    const response = await axios.post(`${API_BASE_URL}/api/v1/simulate/packet-loss`, payload);
+    return response.data;
+  },
+
+  // Uploads
+  async listUploads() {
+    const response = await axios.get(`${API_BASE_URL}/api/v1/uploads`);
+    return response.data;
+  },
+
+  // Comparison simulation
+  async simulateComparison(filePath, trialsPerPoint = 20) {
+    const response = await axios.post(`${API_BASE_URL}/api/v1/simulate/comparison`, {
+      file_path: filePath,
+      trials_per_point: trialsPerPoint
     });
     return response.data;
   }

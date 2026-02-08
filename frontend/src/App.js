@@ -23,8 +23,17 @@ function App() {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
 
+  // Track the last uploaded file for simulation
+  const [uploadedFilePath, setUploadedFilePath] = useState(null);
+  const [uploadedFileName, setUploadedFileName] = useState(null);
+
   // Receiver state
-  const [receiverUrl, setReceiverUrl] = useState('http://localhost:8080');
+  // In production (behind nginx), receiver API is at /receiver on the same host.
+  // In dev, it's at localhost:8080.
+  const defaultReceiverUrl = process.env.NODE_ENV === 'production'
+    ? `${window.location.origin}/receiver`
+    : 'http://localhost:8080';
+  const [receiverUrl, setReceiverUrl] = useState(defaultReceiverUrl);
   const [receiverStatus, setReceiverStatus] = useState(null);
   const [receivedFiles, setReceivedFiles] = useState([]);
 
@@ -52,7 +61,12 @@ function App() {
 
   const setupWebSocket = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.hostname}:3000/ws`;
+    // In production (behind nginx), WebSocket goes through the same host/port.
+    // In dev, falls back to localhost:3000.
+    const wsHost = process.env.NODE_ENV === 'production'
+      ? window.location.host
+      : `${window.location.hostname}:3000`;
+    const wsUrl = `${protocol}//${wsHost}/ws`;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -143,9 +157,30 @@ function App() {
     }
   }, [mode, loadTransfers, loadReceiverData, setupWebSocket]);
 
+  // Load previously uploaded files on mount so simulation works across refreshes
+  useEffect(() => {
+    if (mode === 'sender' && !uploadedFilePath) {
+      api.listUploads().then(data => {
+        if (data.files && data.files.length > 0) {
+          // Pick the last file (most recently listed)
+          const latest = data.files[data.files.length - 1];
+          setUploadedFilePath(latest.file_path);
+          setUploadedFileName(latest.file_name);
+        }
+      }).catch(() => {
+        // silent - uploads endpoint might not be available yet
+      });
+    }
+  }, [mode, uploadedFilePath]);
+
   const handleFileUpload = async (file, priority, receiverAddr) => {
     try {
       const result = await api.uploadAndTransfer(file, priority, receiverAddr);
+      // Track the uploaded file path for simulation
+      if (result.file_path) {
+        setUploadedFilePath(result.file_path);
+        setUploadedFileName(result.file_name || file.name);
+      }
       setTimeout(loadTransfers, 500);
       return result;
     } catch (error) {
@@ -216,9 +251,17 @@ function App() {
               />
             </div>
 
-            <PacketLossSimulator currentMetrics={currentMetrics} />
+            <PacketLossSimulator
+              currentMetrics={currentMetrics}
+              uploadedFilePath={uploadedFilePath}
+              uploadedFileName={uploadedFileName}
+            />
 
-            <ComparisonView currentMetrics={currentMetrics} />
+            <ComparisonView
+              currentMetrics={currentMetrics}
+              uploadedFilePath={uploadedFilePath}
+              uploadedFileName={uploadedFileName}
+            />
 
             <TransferList
               transfers={transfers}

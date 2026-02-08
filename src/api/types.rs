@@ -13,6 +13,8 @@ pub struct StartTransferRequest {
 pub struct StartTransferResponse {
     pub session_id: String,
     pub message: String,
+    pub file_path: Option<String>,
+    pub file_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +117,7 @@ pub struct MetricsSummaryResponse {
 pub struct SimulationRequest {
     pub loss_rate: f32,
     pub duration_seconds: Option<u64>,
+    pub file_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +127,20 @@ pub struct SimulationResponse {
     pub resulting_parity: usize,
     pub recovery_capability: f64,
     pub overhead_percent: f64,
+    // File-based simulation fields (present when file_path was provided)
+    pub file_name: Option<String>,
+    pub total_chunks: Option<u32>,
+    pub data_chunks: Option<usize>,
+    pub parity_chunks: Option<usize>,
+    // Multi-trial aggregate stats
+    pub num_trials: Option<u32>,
+    pub successful_trials: Option<u32>,
+    pub success_rate: Option<f64>,
+    pub avg_chunks_lost: Option<f64>,
+    pub avg_chunks_recovered: Option<f64>,
+    pub min_chunks_lost: Option<u32>,
+    pub max_chunks_lost: Option<u32>,
+    pub file_size_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,4 +176,45 @@ pub struct MetricsSnapshotData {
     pub chunks_sent: u64,
     pub chunks_lost: u64,
     pub chunks_recovered: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadedFileInfo {
+    pub file_name: String,
+    pub file_path: String,
+    pub file_size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListUploadsResponse {
+    pub files: Vec<UploadedFileInfo>,
+}
+
+// --- Comparison simulation types ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComparisonRequest {
+    pub file_path: String,
+    pub trials_per_point: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComparisonPoint {
+    pub loss_percent: u32,
+    pub tcp_success_rate: f64,
+    pub resilient_success_rate: f64,
+    pub tcp_avg_chunks_lost: f64,
+    pub resilient_avg_chunks_lost: f64,
+    pub resilient_avg_recovered: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComparisonResponse {
+    pub file_name: String,
+    pub file_size_bytes: u64,
+    pub total_chunks: u32,
+    pub data_chunks: usize,
+    pub parity_chunks: usize,
+    pub trials_per_point: u32,
+    pub points: Vec<ComparisonPoint>,
 }

@@ -36,7 +36,7 @@ function ReceiverDashboard({ status, receiverUrl, onReceiverUrlChange }) {
           type="text"
           value={receiverUrl}
           onChange={(e) => onReceiverUrlChange(e.target.value)}
-          placeholder="http://localhost:8080"
+          placeholder="Receiver API endpoint"
           className="endpoint-input"
         />
       </div>

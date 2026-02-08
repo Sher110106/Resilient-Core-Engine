@@ -15,6 +15,47 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time;
 
+/// Result of a file-based packet loss simulation (aggregated over multiple trials)
+#[derive(Debug, Clone)]
+pub struct SimulateFileResult {
+    pub file_name: String,
+    pub file_size_bytes: u64,
+    pub total_chunks: u32,
+    pub data_chunks: usize,
+    pub parity_chunks: usize,
+    // Aggregate stats over N trials
+    pub num_trials: u32,
+    pub successful_trials: u32,
+    pub success_rate: f64,
+    pub avg_chunks_lost: f64,
+    pub avg_chunks_recovered: f64,
+    pub min_chunks_lost: u32,
+    pub max_chunks_lost: u32,
+}
+
+/// Single data point in a TCP vs RESILIENT comparison sweep
+#[derive(Debug, Clone)]
+pub struct ComparisonPoint {
+    pub loss_percent: u32,
+    pub tcp_success_rate: f64,
+    pub resilient_success_rate: f64,
+    pub tcp_avg_chunks_lost: f64,
+    pub resilient_avg_chunks_lost: f64,
+    pub resilient_avg_recovered: f64,
+}
+
+/// Full comparison result across all loss rates
+#[derive(Debug, Clone)]
+pub struct ComparisonResult {
+    pub file_name: String,
+    pub file_size_bytes: u64,
+    pub total_chunks: u32,
+    pub data_chunks: usize,
+    pub parity_chunks: usize,
+    pub trials_per_point: u32,
+    pub points: Vec<ComparisonPoint>,
+}
+
 pub struct TransferCoordinator {
     chunk_manager: Arc<ChunkManager>,
     verifier: Arc<IntegrityVerifier>,
@@ -118,17 +159,26 @@ impl TransferCoordinator {
             .insert(session_id.clone(), state_machine.clone());
         self.recent_transfers
             .insert(session_id.clone(), state_machine);
-        self.file_to_session.insert(file_id, session_id.clone());
+        self.file_to_session
+            .insert(file_id.clone(), session_id.clone());
 
         // Start transfer worker
         let coordinator = self.clone();
         let worker_session_id = session_id.clone();
+        let worker_file_id = file_id;
         tokio::spawn(async move {
             if let Err(e) = coordinator
                 .transfer_worker(worker_session_id.clone(), manifest, chunks, receiver_addr)
                 .await
             {
                 eprintln!("Transfer worker failed for {worker_session_id}: {e}");
+                // Mark as failed so the UI reflects the error
+                let _ = coordinator
+                    .session_store
+                    .update_status(&worker_session_id, SessionStatus::Failed(e.to_string()))
+                    .await;
+                coordinator.active_transfers.remove(&worker_session_id);
+                coordinator.file_to_session.remove(&worker_file_id);
             }
         });
 
@@ -371,6 +421,213 @@ impl TransferCoordinator {
         }
     }
 
+    /// Simulate a file transfer with a given packet loss rate.
+    /// Runs multiple trials to produce statistically meaningful results.
+    pub async fn simulate_file_transfer(
+        &self,
+        file_path: PathBuf,
+        loss_rate: f32,
+    ) -> CoordinatorResult<SimulateFileResult> {
+        use rand::Rng;
+
+        const NUM_TRIALS: u32 = 10;
+
+        // Set the adaptive coder to reflect the simulated loss rate
+        self.adaptive_coder.set_loss_rate(loss_rate);
+
+        // Get the adaptive parity level for this loss rate
+        let adaptive_parity = self.adaptive_coder.current_parity();
+
+        // Split the file into chunks using smart chunk sizing for simulation
+        let file_id = file_path.to_string_lossy().to_string();
+        let file_size = tokio::fs::metadata(&file_path).await?.len();
+        let sim_chunk_size = crate::chunk::ChunkManager::simulation_chunk_size(file_size);
+        let (manifest, chunks) = self
+            .chunk_manager
+            .split_file_with_chunk_size(
+                &file_path,
+                file_id,
+                Priority::Normal,
+                sim_chunk_size,
+                Some(adaptive_parity),
+            )
+            .await?;
+
+        let total_chunks = chunks.len() as u32;
+        let data_chunks = manifest.data_chunks as usize;
+        let parity_chunks = manifest.parity_chunks as usize;
+
+        let mut rng = rand::thread_rng();
+        let mut successful_trials: u32 = 0;
+        let mut total_lost: u32 = 0;
+        let mut total_recovered: u32 = 0;
+        let mut min_lost: u32 = u32::MAX;
+        let mut max_lost: u32 = 0;
+
+        for _ in 0..NUM_TRIALS {
+            let mut lost_count: u32 = 0;
+
+            for _ in &chunks {
+                let roll: f32 = rng.gen();
+                if roll < loss_rate {
+                    lost_count += 1;
+                }
+            }
+
+            let surviving = total_chunks - lost_count;
+            let recoverable = surviving as usize >= data_chunks;
+
+            if recoverable {
+                successful_trials += 1;
+                total_recovered += lost_count; // all lost chunks effectively recovered
+            } else {
+                let max_rec = (parity_chunks as u32).min(lost_count);
+                total_recovered += max_rec;
+            }
+
+            total_lost += lost_count;
+            min_lost = min_lost.min(lost_count);
+            max_lost = max_lost.max(lost_count);
+        }
+
+        if min_lost == u32::MAX {
+            min_lost = 0;
+        }
+
+        let avg_lost = total_lost as f64 / NUM_TRIALS as f64;
+        let avg_recovered = total_recovered as f64 / NUM_TRIALS as f64;
+        let success_rate = successful_trials as f64 / NUM_TRIALS as f64 * 100.0;
+
+        // Update simulation counters for the live dashboard (aggregate across all trials)
+        self.sim_chunks_sent.fetch_add(
+            (total_chunks as u64) * (NUM_TRIALS as u64),
+            Ordering::Relaxed,
+        );
+        self.sim_chunks_lost
+            .fetch_add(total_lost as u64, Ordering::Relaxed);
+        self.sim_chunks_recovered
+            .fetch_add(total_recovered as u64, Ordering::Relaxed);
+
+        let file_name = file_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        Ok(SimulateFileResult {
+            file_name,
+            file_size_bytes: manifest.total_size,
+            total_chunks,
+            data_chunks,
+            parity_chunks,
+            num_trials: NUM_TRIALS,
+            successful_trials,
+            success_rate,
+            avg_chunks_lost: avg_lost,
+            avg_chunks_recovered: avg_recovered,
+            min_chunks_lost: min_lost,
+            max_chunks_lost: max_lost,
+        })
+    }
+
+    /// Run a comparison simulation: for each loss rate (0%..40%), run N trials
+    /// for both TCP-style (no FEC, any lost chunk = failure) and RESILIENT
+    /// (Reed-Solomon parity). Returns per-point success rates.
+    pub async fn simulate_comparison(
+        &self,
+        file_path: PathBuf,
+        trials_per_point: u32,
+    ) -> CoordinatorResult<ComparisonResult> {
+        use rand::Rng;
+
+        let file_id = file_path.to_string_lossy().to_string();
+        let file_size = tokio::fs::metadata(&file_path).await?.len();
+        let sim_chunk_size = crate::chunk::ChunkManager::simulation_chunk_size(file_size);
+        // Use max parity (25 shards at severe loss) for comparison view so we
+        // show the full RESILIENT recovery capability across all loss rates.
+        let max_parity = 25_usize; // matches AdaptiveErasureConfig::max_parity_shards
+        let (manifest, chunks) = self
+            .chunk_manager
+            .split_file_with_chunk_size(
+                &file_path,
+                file_id,
+                Priority::Normal,
+                sim_chunk_size,
+                Some(max_parity),
+            )
+            .await?;
+
+        let total_chunks = chunks.len() as u32;
+        let data_chunks = manifest.data_chunks as usize;
+        let parity_chunks = manifest.parity_chunks as usize;
+
+        let file_name = file_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        let mut rng = rand::thread_rng();
+        let mut points = Vec::new();
+
+        // Sweep loss from 0% to 40% in 1% steps
+        for loss_pct in 0..=40u32 {
+            let loss_rate = loss_pct as f32 / 100.0;
+
+            let mut tcp_successes: u32 = 0;
+            let mut resilient_successes: u32 = 0;
+            let mut tcp_total_lost: u32 = 0;
+            let mut resilient_total_lost: u32 = 0;
+            let mut resilient_total_recovered: u32 = 0;
+
+            for _ in 0..trials_per_point {
+                let mut lost: u32 = 0;
+                for _ in 0..total_chunks {
+                    if rng.gen::<f32>() < loss_rate {
+                        lost += 1;
+                    }
+                }
+
+                // TCP: no FEC, any lost chunk means the file is incomplete
+                if lost == 0 {
+                    tcp_successes += 1;
+                }
+                tcp_total_lost += lost;
+
+                // RESILIENT: can tolerate up to parity_chunks lost
+                let surviving = total_chunks - lost;
+                if surviving as usize >= data_chunks {
+                    resilient_successes += 1;
+                    resilient_total_recovered += lost;
+                } else {
+                    let max_rec = (parity_chunks as u32).min(lost);
+                    resilient_total_recovered += max_rec;
+                }
+                resilient_total_lost += lost;
+            }
+
+            let t = trials_per_point as f64;
+            points.push(ComparisonPoint {
+                loss_percent: loss_pct,
+                tcp_success_rate: tcp_successes as f64 / t * 100.0,
+                resilient_success_rate: resilient_successes as f64 / t * 100.0,
+                tcp_avg_chunks_lost: tcp_total_lost as f64 / t,
+                resilient_avg_chunks_lost: resilient_total_lost as f64 / t,
+                resilient_avg_recovered: resilient_total_recovered as f64 / t,
+            });
+        }
+
+        Ok(ComparisonResult {
+            file_name,
+            file_size_bytes: manifest.total_size,
+            total_chunks,
+            data_chunks,
+            parity_chunks,
+            trials_per_point,
+            points,
+        })
+    }
+
     /// Get uptime in seconds
     pub fn uptime_seconds(&self) -> u64 {
         self.start_time.elapsed().as_secs()
@@ -416,10 +673,14 @@ impl TransferCoordinator {
 
         // Establish connection once if receiver address provided
         let connection = if let Some(addr) = receiver_addr {
+            println!("Connecting to receiver at {addr}...");
             match self.transport.connect(addr).await {
-                Ok(conn) => Some(conn),
+                Ok(conn) => {
+                    println!("Connected to receiver at {addr}");
+                    Some(conn)
+                }
                 Err(e) => {
-                    eprintln!("Failed to connect to receiver: {e}");
+                    eprintln!("Failed to connect to receiver at {addr}: {e}");
                     state_machine.transition(TransferEvent::NetworkFailure {
                         path_id: "default".to_string(),
                     })?;
@@ -503,6 +764,8 @@ impl TransferCoordinator {
         if session.status == SessionStatus::Completed {
             state_machine.transition(TransferEvent::TransferComplete)?;
             self.active_transfers.remove(&session_id);
+            // Remove file-to-session mapping so the same file can be re-uploaded
+            self.file_to_session.remove(&session.file_id);
             // Keep in recent_transfers for display
         }
 

@@ -227,3 +227,89 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* File indicator */
+.sim-file-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.sim-file-name {
+  color: var(--text-primary);
+}
+
+.sim-file-name strong {
+  color: var(--accent);
+}
+
+.sim-file-missing {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Recovery banner */
+.sim-recovery-banner {
+  text-align: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.sim-recovery-banner.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.sim-recovery-banner.failure {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.sim-recovery-banner.warning {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(217, 119, 6, 0.2);
+}
+
+/* File result grid */
+.file-result-grid {
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.result-value.danger {
+  color: var(--danger);
+}
+
+.result-value.success {
+  color: var(--success);
+}
+
+.result-value.warning-text {
+  color: var(--warning);
+}
+
+/* Disabled slider */
+.loss-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.loss-slider:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+}
